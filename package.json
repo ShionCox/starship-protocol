@@ -1,0 +1,22 @@
+{
+  "name": "starship-protocol",
+  "uuid": "d826ab96-1150-44fa-a59f-b6132e52a668",
+  "type": "module",
+  "scripts": {
+    "test:core": "node --experimental-strip-types --test tests/game-core/RoomDefinition.test.ts tests/game-core/ShipGridModel.test.ts tests/game-core/ShipLayoutSnapshot.test.ts tests/application/SecureConfigPackage.test.ts tests/application/SecureConfigBootstrap.test.ts",
+    "test:security": "node --test tools/release-security/release-security.test.mjs",
+    "test:security-api": "python -m unittest discover -s services/api/tests -v",
+    "test:launcher": "node tools/release-security/compile-launcher-smoke.mjs",
+    "test:security-native": "node tools/release-security/compile-security-plugin-smoke.mjs",
+    "test": "npm run test:core && npm run test:security && npm run test:security-api",
+    "security:pack-config": "node tools/release-security/release-security.mjs pack-config",
+    "security:create-manifest": "node tools/release-security/release-security.mjs create-manifest",
+    "security:verify-release": "node tools/release-security/release-security.mjs verify-release",
+    "security:audit-windows-native": "node tools/release-security/release-security.mjs audit-windows-native",
+    "security:build-windows-native": "node tools/release-security/build-cocos-windows-release.mjs",
+    "security:export-public-key": "node tools/release-security/release-security.mjs export-public-key"
+  },
+  "creator": {
+    "version": "3.8.8"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "starship-security-config",
+  "version": "1.0.0",
+  "author": "Starship Protocol",
+  "description": "Windows AES-256-GCM configuration bridge",
+  "engine-version": ">=3.8.8 <3.9.0",
+  "disabled": false,
+  "platforms": ["windows"],
+  "modules": [
+    {
+      "target": "starship_security"
+    }
+  ]
+}

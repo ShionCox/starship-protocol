@@ -1,0 +1,64 @@
+
+#///////////////////////////
+# Cocos Creator 3D Project
+#///////////////////////////
+.creator/
+library/
+temp/
+local/
+build/
+profiles/
+native
+!native/
+native/*
+!native/launcher/
+!native/launcher/**
+!native/security-config/
+!native/security-config/**
+
+# 生产密钥、签名证书和本地安全发布产物不得进入仓库。
+*.pem
+*.pfx
+*.p12
+*.key
+*.spcfg
+*.spmanifest
+release-security-output/
+#//////////////////////////
+# NPM
+#//////////////////////////
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+coverage/
+*.tsbuildinfo
+
+# 本地环境变量和临时密钥
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+#//////////////////////////
+# VSCode
+#//////////////////////////
+.vscode/
+
+#//////////////////////////
+# WebStorm
+#//////////////////////////
+.idea/
+
+# 操作系统和编辑器临时文件
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
