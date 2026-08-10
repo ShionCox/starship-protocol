@@ -61,11 +61,14 @@ export interface RoomDefinitionDocument {
  */
 export async function discoverRoomPrefabs(assetDb: AssetDbPort): Promise<RoomDiscoveryResult> {
   const warnings: string[] = [];
-  const [configAssets, prefabAssets, roomViewUuid] = await Promise.all([
-    assetDb.queryAssets({ extname: '.json', pattern: `${ROOM_CONFIG_DIRECTORY}/**` }),
-    assetDb.queryAssets({ extname: '.prefab', pattern: 'db://assets/prefabs/**' }),
+  const [allAssets, roomViewUuid] = await Promise.all([
+    assetDb.queryAssets(),
     resolveRoomViewScriptUuid(assetDb),
   ]);
+  const configAssets = allAssets.filter((asset) =>
+    asset.url.startsWith(`${ROOM_CONFIG_DIRECTORY}/`) && asset.url.endsWith('.json'));
+  const prefabAssets = allAssets.filter((asset) =>
+    asset.url.startsWith('db://assets/prefabs/') && asset.url.endsWith('.prefab'));
   if (roomViewUuid === '') {
     return {
       entries: [],

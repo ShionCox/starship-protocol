@@ -60,10 +60,17 @@ export interface SceneQueryPort {
     readonly name: string;
     readonly assetUuid?: string;
     readonly position?: { readonly x: number; readonly y: number; readonly z: number };
+    /** 是否由 Creator 为本次节点创建立即生成快照；批量操作由调用方统一 snapshot。 */
+    readonly snapshot?: boolean;
   }): Promise<SceneNodeCreation | null>;
   createComponent(nodeUuid: string, component: string): Promise<void>;
   removeNode(nodeUuid: string): Promise<void>;
-  setProperty(target: SceneComponentTarget | string, path: string, value: unknown): Promise<boolean>;
+  setProperty(
+    target: SceneComponentTarget | string,
+    path: string,
+    value: unknown,
+    options?: { readonly record?: boolean },
+  ): Promise<boolean>;
   queryComponent(componentUuid: string): Promise<SceneComponentProperty | null>;
   /** Cocos 公开组件注册表，用于把压缩 cid 还原为稳定类名。 */
   queryComponents?(): Promise<readonly SceneComponentClassInfo[]>;
@@ -93,7 +100,7 @@ export const editorSceneQuery: SceneQueryPort = {
       assetUuid: options.assetUuid,
       position: options.position,
       nameIncrease: true,
-      snapshot: false,
+      snapshot: options.snapshot ?? false,
     });
     if (typeof result === 'string') return { uuid: result };
     return result as SceneNodeCreation | null;
@@ -107,7 +114,7 @@ export const editorSceneQuery: SceneQueryPort = {
   async removeNode(nodeUuid) {
     await Editor.Message.request('scene', 'remove-node', { uuid: nodeUuid });
   },
-  async setProperty(target, path, value) {
+  async setProperty(target, path, value, options = {}) {
     const targetInfo = typeof target === 'string' ? undefined : target;
     const uuid = targetInfo?.nodeUuid ?? (typeof target === 'string' ? target : target.uuid);
     const propertyPath = targetInfo === undefined ? path : `__comps__.${targetInfo.index}.${path}`;
@@ -118,7 +125,8 @@ export const editorSceneQuery: SceneQueryPort = {
       uuid,
       path: propertyPath,
       dump: dump as never,
-      record: false,
+      // 正常写入必须进入 Creator Undo 记录；失败回滚由调用方传 record:false。
+      record: options.record ?? true,
     }) as boolean;
   },
   async queryComponent(componentUuid) {

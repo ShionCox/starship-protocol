@@ -13,7 +13,10 @@ function fakeDb() {
     { uuid: 'prefab-bad', url: 'db://assets/prefabs/BadRoom.prefab', isDirectory: false },
   ];
   return {
-    async queryAssets(options) { return options.extname === '.json' ? configs : prefabs; },
+    async queryAssets(options) {
+      if (options === undefined) return [...configs, ...prefabs];
+      return options.extname === '.json' ? configs : prefabs;
+    },
     async queryUuid(url) { return url.endsWith('RoomView.ts') ? 'room-view-script' : ''; },
     async queryInfo() { return null; },
     async readFile(uuid) {
@@ -34,6 +37,19 @@ test('自动发现只返回有效 RoomView Prefab 与房间定义绑定', async 
   assert.equal(result.warnings.length, 1);
 });
 
+test('自动发现通过公开全量查询后按资源 URL 过滤', async () => {
+  const db = fakeDb();
+  const calls = [];
+  const originalQueryAssets = db.queryAssets;
+  db.queryAssets = async (options) => {
+    calls.push(options);
+    return originalQueryAssets(options);
+  };
+  const result = await discoverRoomPrefabs(db);
+  assert.equal(result.entries.length, 1);
+  assert.deepEqual(calls, [undefined]);
+});
+
 test('编辑器边界解析拒绝未知版本和非法 ID', () => {
   assert.equal(parseRoomDefinition({ schemaVersion: 99 }), null);
   assert.equal(parseRoomDefinition({ schemaVersion: 1, id: 'Laser Room', displayName: '激光室', category: 'WEAPON', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 3, crewCapacity: 1 }), null);
@@ -41,13 +57,12 @@ test('编辑器边界解析拒绝未知版本和非法 ID', () => {
 
 test('无法定位 RoomView 脚本时自动发现 fail closed', async () => {
   const db = fakeDb();
+  const originalQueryAssets = db.queryAssets;
   db.queryUuid = async () => '';
   db.queryInfo = async () => null;
-  db.queryAssets = async (options) => options.extname === '.ts'
+  db.queryAssets = async (options) => options?.extname === '.ts'
     ? []
-    : options.extname === '.json'
-      ? [{ uuid: 'config-laser', url: 'db://assets/config/rooms/room-laser.json', isDirectory: false }]
-      : [{ uuid: 'prefab-laser', url: 'db://assets/prefabs/LaserRoom.prefab', isDirectory: false }];
+    : originalQueryAssets(options);
   const result = await discoverRoomPrefabs(db);
   assert.equal(result.entries.length, 0);
   assert.match(result.warnings[0], /无法定位 RoomView/);
@@ -57,7 +72,7 @@ test('query-uuid 暂时为空时从 Asset DB 脚本列表回退解析 RoomView',
   const db = fakeDb();
   db.queryUuid = async () => '';
   const originalQueryAssets = db.queryAssets;
-  db.queryAssets = async (options) => options.extname === '.ts'
+  db.queryAssets = async (options) => options?.extname === '.ts'
     ? [{ uuid: 'room-view-script', url: 'db://assets/scripts/presentation/RoomView.ts', isDirectory: false }]
     : originalQueryAssets(options);
   const result = await discoverRoomPrefabs(db);

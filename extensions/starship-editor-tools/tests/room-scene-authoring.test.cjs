@@ -33,7 +33,7 @@ function tree() {
       }],
     }, {
       uuid: 'app', name: 'AppRoot', parent: 'scene',
-      components: [{ type: 'PrototypeSceneSettings', uuid: 'settings' }], children: [],
+      components: [{ type: 'PrototypeSceneSettings', uuid: 'settings' }, { type: 'CameraController', uuid: 'camera-controller' }], children: [],
     }],
   };
 }
@@ -105,5 +105,85 @@ test('创建房间会跳过已有的稳定实例 ID', async () => {
   const result = await createRoomInstance(scene, {}, entry);
   assert.equal(result.ok, true);
   assert.equal(calls.some((call) => call[0] === 'set' && call[3] === 'room-laser-2'), true);
+  delete global.Editor;
+});
+
+test('没有标准骨架但存在 Canvas 时创建到 Canvas 顶层且不执行网格方法', async () => {
+  const sceneTree = {
+    uuid: 'scene', name: 'EmptyScene', children: [{ uuid: 'canvas', name: 'Canvas', parent: 'scene', children: [] }],
+  };
+  const calls = [];
+  let created = false;
+  const scene = {
+    async queryNodeTree() {
+      if (created) sceneTree.children[0].children.push({ uuid: 'room-new', name: 'Room-激光室', parent: 'canvas', components: [{ type: 'RoomView', uuid: 'room-view-new' }], children: [] });
+      return sceneTree;
+    },
+    async queryComponent() { return null; },
+    async executeComponentMethod() { throw new Error('非网格放置不应调用组件方法'); },
+    async createNode(options) { created = true; calls.push(['create', options.parent, options.position]); return { uuid: 'room-new' }; },
+    async setProperty(uuid, path, value) { calls.push(['set', uuid, path, value]); return true; },
+    async removeNode(uuid) { calls.push(['remove', uuid]); },
+    async snapshot() { calls.push(['snapshot']); },
+    async snapshotAbort() { calls.push(['snapshot-abort']); },
+  };
+  global.Editor = { Selection: { select() {} }, Message: { async request() {} } };
+  const result = await createRoomInstance(scene, {}, entry);
+  assert.equal(result.ok, true);
+  assert.match(result.message, /Canvas 顶层/);
+  assert.deepEqual(calls[0], ['create', 'canvas', { x: 0, y: 0, z: 0 }]);
+  assert.equal(calls.filter((call) => call[0] === 'snapshot').length, 1);
+  assert.equal(calls.some((call) => call[0] === 'execute'), false);
+  delete global.Editor;
+});
+
+test('没有标准骨架和 Canvas 时创建到场景根节点', async () => {
+  const sceneTree = { uuid: 'scene', name: 'EmptyScene', children: [] };
+  const calls = [];
+  let created = false;
+  const scene = {
+    async queryNodeTree() {
+      if (created) sceneTree.children.push({ uuid: 'room-new', name: 'Room-激光室', parent: 'scene', components: [{ type: 'RoomView', uuid: 'room-view-new' }], children: [] });
+      return sceneTree;
+    },
+    async queryComponent() { return null; },
+    async executeComponentMethod() { throw new Error('非网格放置不应调用组件方法'); },
+    async createNode(options) { created = true; calls.push(['create', options.parent]); return { uuid: 'room-new' }; },
+    async setProperty() { return true; },
+    async removeNode() {},
+    async snapshot() { calls.push(['snapshot']); },
+    async snapshotAbort() {},
+  };
+  global.Editor = { Selection: { select() {} }, Message: { async request() {} } };
+  const result = await createRoomInstance(scene, {}, entry);
+  assert.equal(result.ok, true);
+  assert.match(result.message, /场景顶层/);
+  assert.deepEqual(calls[0], ['create', 'scene']);
+  assert.equal(calls.filter((call) => call[0] === 'snapshot').length, 1);
+  delete global.Editor;
+});
+
+test('创建结果缺少 RoomView 时删除临时节点并放弃快照', async () => {
+  const sceneTree = tree();
+  const calls = [];
+  let created = false;
+  const scene = {
+    async queryNodeTree() {
+      if (created) sceneTree.children[0].children[0].children[0].children[1].children.push({ uuid: 'room-new', name: 'Room-激光室', parent: 'rooms', components: [], children: [] });
+      return sceneTree;
+    },
+    async queryComponents() { return []; },
+    async queryComponent() { return null; },
+    async executeComponentMethod(_uuid, name) { return name === 'findFirstAvailableRoomPlacement' ? { x: 2, y: 1 } : true; },
+    async createNode() { created = true; return { uuid: 'room-new' }; },
+    async setProperty() { calls.push(['set']); return true; },
+    async removeNode(uuid) { calls.push(['remove', uuid]); },
+    async snapshot() { calls.push(['snapshot']); },
+    async snapshotAbort() { calls.push(['snapshot-abort']); },
+  };
+  global.Editor = { Selection: { select() {} }, Message: { async request() {} } };
+  const result = await createRoomInstance(scene, {}, entry);
+  assert.equal(result.ok, false);
+  assert.deepEqual(calls, [['remove', 'room-new'], ['snapshot-abort']]);
   delete global.Editor;
 });

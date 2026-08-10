@@ -212,6 +212,26 @@ export class PrototypeSceneSettings extends Component {
     };
   }
 
+  /**
+   * 将目标父节点中的本地房间中心换算为逻辑格。
+   * 编辑器房间拖动与 Undo 读取本地坐标即可，避免提前消费房间节点的渲染变换脏标记。
+   */
+  public parentLocalCenterToGrid(
+    parent: Node,
+    parentLocalCenter: Readonly<Vec3>,
+    widthCells: number,
+    heightCells: number,
+  ): GridPosition | null {
+    if (this.gridRoot === null || !this.hasValidRoomSize(widthCells, heightCells)) {
+      return null;
+    }
+
+    this.refreshEditorWorldTransform();
+    parent.updateWorldTransform();
+    const worldCenter = Vec3.transformMat4(new Vec3(), parentLocalCenter, parent.worldMatrix);
+    return this.worldCenterToGrid(worldCenter, widthCells, heightCells);
+  }
+
   /** 将逻辑房间中心转换为目标父节点的本地坐标。 */
   public gridPositionToParentLocal(
     parent: Node,
@@ -231,6 +251,9 @@ export class PrototypeSceneSettings extends Component {
       0,
     );
     const worldCenter = Vec3.transformMat4(new Vec3(), gridCenter, this.gridRoot.worldMatrix);
+    // 编辑器撤销/重做可能只先标记父节点矩阵为 dirty；换算前主动更新，
+    // 确保返回的本地坐标与当前场景层级一致，而不是上一帧缓存。
+    parent.updateWorldTransform();
     return parent.inverseTransformPoint(new Vec3(), worldCenter);
   }
 
@@ -259,7 +282,12 @@ export class PrototypeSceneSettings extends Component {
         if (roomView?.resolveRoomDefinition === undefined) continue;
         const definitionResult = roomView.resolveRoomDefinition();
         if (!definitionResult.ok || typeof roomView.roomInstanceId !== 'string') continue;
-        const position = this.worldCenterToGrid(roomNode.worldPosition, definitionResult.definition.width, definitionResult.definition.height);
+        const position = this.parentLocalCenterToGrid(
+          roomRoot,
+          roomNode.position,
+          definitionResult.definition.width,
+          definitionResult.definition.height,
+        );
         if (position === null) continue;
         grid.placeRoom({
           id: roomView.roomInstanceId.trim(),

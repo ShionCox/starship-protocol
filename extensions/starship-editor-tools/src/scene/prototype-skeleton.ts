@@ -95,7 +95,15 @@ async function ensureChild(
   if (parent.uuid === undefined) throw new Error(`父节点缺少 UUID，无法创建 ${displayName}`);
   const created = await scene.createNode({ parent: parent.uuid, name: displayName });
   if (created?.uuid === undefined) throw new Error(`创建节点失败：${displayName}`);
-  const node: MutableNode = { uuid: created.uuid, name: displayName, children: [] };
+  // Cocos 的 scene/create-node 会为 2D 节点自动挂载 UITransform；本地镜像也要
+  // 记录这个公开创建副作用，否则后续 ensureComponents 会重复调用
+  // create-component，并让 Creator 报错后回滚整个骨架操作。
+  const node: MutableNode = {
+    uuid: created.uuid,
+    name: displayName,
+    children: [],
+    components: [{ type: 'cc.UITransform', nodeUuid: created.uuid, index: 0 }],
+  };
   parent.children.push(node);
   createdNodes.push(created.uuid);
   return { uuid: created.uuid, node };

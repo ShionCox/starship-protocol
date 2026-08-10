@@ -40,7 +40,15 @@ test('组件属性通过公开 Scene 消息写入 __comps__ 路径和引用 dump
     uuid: 'app-root',
     path: '__comps__.2.gridRoot',
     dump: { type: 'cc.Node', value: { uuid: 'grid-root' } },
-    record: false,
+    record: true,
   }]);
+  delete global.Editor;
+});
+
+test('场景回滚可显式关闭 Undo 记录', async () => {
+  const calls = [];
+  global.Editor = { Message: { request: async (...args) => { calls.push(args); return true; } } };
+  await editorSceneQuery.setProperty('node', 'position', { x: 0, y: 0, z: 0 }, { record: false });
+  assert.equal(calls[0][2].record, false);
   delete global.Editor;
 });

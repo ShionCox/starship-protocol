@@ -22,7 +22,7 @@ export interface AssetDbPort {
   saveAsset(url: string, content: string): Promise<CreatedAssetInfo | null>;
   copyAsset(sourceUrl: string, targetUrl: string): Promise<CreatedAssetInfo | null>;
   deleteAsset(url: string): Promise<CreatedAssetInfo | null>;
-  queryAssets(options: { readonly extname?: string; readonly pattern?: string }): Promise<readonly AssetInfo[]>;
+  queryAssets(options?: { readonly extname?: string; readonly pattern?: string }): Promise<readonly AssetInfo[]>;
   queryDependencies(urlOrUuid: string): Promise<readonly string[]>;
   queryInfo(urlOrUuid: string): Promise<AssetInfo | null>;
   readFile(urlOrUuid: string): Promise<string>;
@@ -66,7 +66,7 @@ export const editorAssetDb: AssetDbPort = {
     return await Editor.Message.request('asset-db', 'query-assets', options) as readonly AssetInfo[];
   },
   async queryDependencies(urlOrUuid) {
-    return await Editor.Message.request('asset-db', 'query-asset-dependencies', urlOrUuid) as readonly string[];
+    return await Editor.Message.request('asset-db', 'query-asset-dependencies', urlOrUuid, 'all') as readonly string[];
   },
   async queryInfo(urlOrUuid) {
     return await Editor.Message.request('asset-db', 'query-asset-info', urlOrUuid) as AssetInfo | null;

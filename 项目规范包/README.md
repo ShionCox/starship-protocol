@@ -105,6 +105,7 @@ flowchart TB
 | 单测、确定性测试、验收、DoD | `docs/16-测试-验收-DoD.md` |
 | R0/R1任务顺序、风险、第一条任务 | `docs/17-里程碑与任务顺序.md` |
 | 外部资料 | `docs/18-参考资料.md` |
+| Cocos 创作工具可识别类型接入 | `docs/19-Cocos创作工具类型接入规范.md` |
 | 原总纲章节迁移映射 | `docs/99-原总纲章节映射.md` |
 | Cocos 编辑器创作工具插件化决策 | `docs/ADR-0001-Cocos编辑器创作工具插件化.md` |
 | Cocos 编辑器创作入口收敛决策 | `docs/ADR-0003-Cocos编辑器创作入口收敛.md` |

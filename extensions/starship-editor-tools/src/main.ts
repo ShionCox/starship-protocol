@@ -1,4 +1,9 @@
-import { PACKAGE_NAME } from './constants';
+import {
+  DEFAULT_PREFAB_DIRECTORY,
+  PACKAGE_NAME,
+  ROOM_CATALOG_CHANGE_MESSAGE,
+  ROOM_CONFIG_DIRECTORY,
+} from './constants';
 import type { AssetMenuContext } from './contracts';
 import {
   createRoomContent as createRoomContentWithAssetDb,
@@ -15,17 +20,26 @@ import {
 } from './rooms/room-module';
 import { initializePrototypeScene } from './scene/prototype-skeleton';
 import { bindRoomDefinitionToOpenPrefab } from './rooms/bind-room-prefab';
-import { resolveRoomRoot } from './rooms/room-scene-authoring';
+import { resolveRoomPlacementTarget } from './rooms/room-scene-authoring';
 import {
   updateRoomDefinition,
   type RoomDefinitionEditRequest,
 } from './rooms/edit-room-definition';
 import type { SceneNodeTree } from './shared/editor-scene';
+import {
+  recognizeAuthoringSelection,
+  type AuthoringSelection,
+} from './authoring-selection';
+import {
+  updateSceneCoreSettings,
+  type SceneCoreSettingsRequest,
+} from './scene/scene-core-authoring';
 
 export interface AuthoringState {
-  readonly selection: { readonly uuid?: string; readonly name?: string };
+  readonly selection: AuthoringSelection;
   readonly roomTarget: {
     readonly ok: boolean;
+    readonly mode: 'grid' | 'canvas' | 'scene-root' | 'blocked';
     readonly uuid?: string;
     readonly path?: string;
     readonly message: string;
@@ -35,6 +49,10 @@ export interface AuthoringState {
 }
 
 let catalogWarnings: readonly string[] = [];
+let catalogFingerprint = '';
+let catalogRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let assetChangeListener: ((...args: unknown[]) => void) | undefined;
+let extensionLoaded = false;
 
 export const methods = {
   openRoomCreate(context: AssetMenuContext) {
@@ -104,20 +122,40 @@ export const methods = {
     if (result.ok) await refreshRoomCatalogNow();
     return result;
   },
+  async updateSceneCoreSettings(request: SceneCoreSettingsRequest) {
+    return await updateSceneCoreSettings(editorSceneQuery, getSelectedNodeUuid(), request);
+  },
 };
 
 export function load(): void {
+  extensionLoaded = true;
+  registerAssetChangeListener();
   void refreshRoomCatalogNow().catch((cause: unknown) => {
     console.warn(`[ROOM] 房间建筑列表刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
   });
 }
-export function unload(): void {}
+export function unload(): void {
+  extensionLoaded = false;
+  const message = getBroadcastMessagePort();
+  if (assetChangeListener !== undefined) {
+    message?.removeBroadcastListener?.('asset-db:asset-change', assetChangeListener);
+    assetChangeListener = undefined;
+  }
+  if (catalogRefreshTimer !== undefined) {
+    clearTimeout(catalogRefreshTimer);
+    catalogRefreshTimer = undefined;
+  }
+}
 
 async function refreshRoomCatalogNow() {
   const result = await discoverRoomPrefabs(editorAssetDb);
   setRoomCatalog(result.entries);
   catalogWarnings = result.warnings;
+  const nextFingerprint = JSON.stringify({ entries: result.entries, warnings: result.warnings });
+  const changed = nextFingerprint !== catalogFingerprint;
+  catalogFingerprint = nextFingerprint;
   for (const warning of result.warnings) console.warn(`[ROOM] ${warning}`);
+  if (changed) getBroadcastMessagePort()?.broadcast?.(ROOM_CATALOG_CHANGE_MESSAGE);
   return result;
 }
 
@@ -126,25 +164,37 @@ async function getAuthoringState(): Promise<AuthoringState> {
   try {
     const tree = await editorSceneQuery.queryNodeTree();
     const selectedNode = selectedUuid === undefined ? undefined : flattenTree(tree).find((node) => node.uuid === selectedUuid);
-    const target = resolveRoomRoot(tree, { nodeUuid: selectedUuid });
+    // Creator 启动或切场景的瞬间，组件注册表可能还未响应；它只用于还原压缩 CID，
+    // 不能因为这个辅助查询失败就把已有 Canvas/场景根判定为不可创建。
+    const componentClasses = editorSceneQuery.queryComponents === undefined
+      ? []
+      : await editorSceneQuery.queryComponents().catch(() => []);
+    const target = resolveRoomPlacementTarget(tree, { nodeUuid: selectedUuid }, componentClasses);
     const roomTarget = target.ok
       ? {
         ok: true,
+        mode: target.mode,
         uuid: target.node.uuid,
         path: getNodePath(tree, target.node.uuid),
-        message: '已解析唯一 RoomRoot，可创建房间建筑',
+        message: target.message,
       }
-      : { ok: false, message: target.message };
+      : { ok: false, mode: 'blocked' as const, message: target.message };
     return {
-      selection: { uuid: selectedUuid, name: selectedNode?.name },
+      selection: await recognizeAuthoringSelection({
+        selectedNode,
+        tree,
+        componentClasses,
+        scene: editorSceneQuery,
+        rooms: getRoomCatalog(),
+      }),
       roomTarget,
       rooms: getRoomCatalog(),
       warnings: catalogWarnings,
     };
   } catch (cause) {
     return {
-      selection: { uuid: selectedUuid },
-      roomTarget: { ok: false, message: `无法读取当前场景：${cause instanceof Error ? cause.message : String(cause)}` },
+      selection: { kind: 'none', typeId: 'none', page: 'scene', uuid: selectedUuid },
+      roomTarget: { ok: false, mode: 'blocked', message: `无法读取当前场景：${cause instanceof Error ? cause.message : String(cause)}` },
       rooms: getRoomCatalog(),
       warnings: catalogWarnings,
     };
@@ -152,10 +202,73 @@ async function getAuthoringState(): Promise<AuthoringState> {
 }
 
 function getSelectedNodeUuid(): string | undefined {
-  const selection = (globalThis as {
-    Editor?: { Selection?: { getSelected?: (type: string) => readonly string[] } };
-  }).Editor?.Selection;
-  return selection?.getSelected?.('node')?.[0];
+  try {
+    const selection = (globalThis as {
+      Editor?: { Selection?: { getSelected?: (type: string) => readonly string[] } };
+    }).Editor?.Selection;
+    return selection?.getSelected?.('node')?.[0];
+  } catch {
+    return undefined;
+  }
+}
+
+function registerAssetChangeListener(): void {
+  if (assetChangeListener !== undefined) return;
+  const message = getBroadcastMessagePort();
+  if (message?.addBroadcastListener === undefined) return;
+  assetChangeListener = (...args: unknown[]) => {
+    void handleAssetChange(args[0]);
+  };
+  message.addBroadcastListener('asset-db:asset-change', assetChangeListener);
+}
+
+async function handleAssetChange(value: unknown): Promise<void> {
+  const uuid = readAssetChangeUuid(value);
+  if (uuid !== undefined && !await isRoomAssetChange(uuid)) return;
+  if (!extensionLoaded) return;
+  if (catalogRefreshTimer !== undefined) clearTimeout(catalogRefreshTimer);
+  catalogRefreshTimer = setTimeout(() => {
+    catalogRefreshTimer = undefined;
+    void refreshRoomCatalogNow().catch((cause: unknown) => {
+      console.warn(`[ROOM] 房间建筑列表自动刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
+    });
+  }, 200);
+}
+
+async function isRoomAssetChange(uuid: string): Promise<boolean> {
+  if (getRoomCatalog().some((entry) => entry.prefabUuid === uuid || entry.configUuid === uuid)) return true;
+  try {
+    const info = await editorAssetDb.queryInfo(uuid);
+    return info === null || isRoomAssetUrl(info.url);
+  } catch {
+    // 资源删除或导入过程中的临时查询失败不能让房间目录停留在旧状态。
+    return true;
+  }
+}
+
+function isRoomAssetUrl(url: string): boolean {
+  return (url.startsWith(`${ROOM_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
+    || (url.startsWith(`${DEFAULT_PREFAB_DIRECTORY}/`) && url.endsWith('.prefab'));
+}
+
+function readAssetChangeUuid(value: unknown): string | undefined {
+  if (typeof value === 'string' && value !== '') return value;
+  if (typeof value === 'object' && value !== null) {
+    const uuid = (value as { uuid?: unknown }).uuid;
+    return typeof uuid === 'string' && uuid !== '' ? uuid : undefined;
+  }
+  return undefined;
+}
+
+interface BroadcastMessagePort {
+  addBroadcastListener?(name: string, callback: (...args: unknown[]) => void): void;
+  removeBroadcastListener?(name: string, callback: (...args: unknown[]) => void): void;
+  broadcast?(name: string, ...args: unknown[]): void;
+}
+
+function getBroadcastMessagePort(): BroadcastMessagePort | undefined {
+  const message = (globalThis as { Editor?: { Message?: unknown } }).Editor?.Message;
+  return typeof message === 'object' && message !== null ? message as BroadcastMessagePort : undefined;
 }
 
 function flattenTree(tree: SceneNodeTree): SceneNodeTree[] {

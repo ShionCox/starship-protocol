@@ -33,7 +33,13 @@ function fakeScene() {
     },
     async createNode(options) {
       const parent = find(options.parent);
-      const node = { uuid: `node-${++sequence}`, name: options.name, children: [], components: [] };
+      // Creator 3.8.8 的 scene/create-node 会自动附带 UITransform。
+      const node = {
+        uuid: `node-${++sequence}`,
+        name: options.name,
+        children: [],
+        components: [{ type: 'cc.UITransform', value: `auto-${sequence}` }],
+      };
       parent.children.push(node);
       calls.push(['node', options.name]);
       return node;
@@ -60,6 +66,7 @@ test('初始化 Prototype 场景骨架创建完整语义树和组件', async () 
     assert.equal(createdNames.includes(name), true, `应创建中文节点：${name}`);
   }
   assert.equal(scene.calls.some((call) => call[0] === 'component' && call[1] === 'PrototypeBootstrap'), true);
+  assert.equal(scene.calls.some((call) => call[0] === 'component' && call[1] === 'cc.UITransform'), false);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'gridRoot'), true);
   assert.equal(scene.calls.filter((call) => call[0] === 'snapshot').length, 1);
 });

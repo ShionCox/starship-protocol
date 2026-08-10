@@ -16,6 +16,26 @@ export interface RoomSceneAuthoringResult {
   readonly nodeUuid?: string;
 }
 
+export type RoomPlacementTarget =
+  | {
+    readonly ok: true;
+    readonly mode: 'grid';
+    readonly node: SceneNodeTree;
+    readonly settings: SceneComponentTarget;
+    readonly message: string;
+  }
+  | {
+    readonly ok: true;
+    readonly mode: 'canvas' | 'scene-root';
+    readonly node: SceneNodeTree;
+    readonly message: string;
+  }
+  | {
+    readonly ok: false;
+    readonly mode: 'blocked';
+    readonly message: string;
+  };
+
 /**
  * 根据面板当前选择解析语义 RoomRoot。
  * 层级管理器只提供选择上下文，真正的创建始终由公开 Scene 消息完成。
@@ -51,6 +71,56 @@ export function resolveRoomRoot(
   return { ok: false, message: '场景中存在多个 RoomRoot，无法安全决定房间父节点' };
 }
 
+/**
+ * 解析房间实例的当前场景放置目标。
+ * 房间目录是项目级资源；只有存在完整网格入口时才把创建动作绑定到 RoomRoot。
+ * 没有标准骨架时优先挂到 Canvas，避免把资源库错误地限制为某个场景。
+ */
+export function resolveRoomPlacementTarget(
+  tree: SceneNodeTree,
+  context: SceneSelectionContext,
+  componentClasses: readonly SceneComponentClassInfo[] = [],
+): RoomPlacementTarget {
+  const roomRootResult = resolveRoomRoot(tree, context);
+  const appRoot = flattenTree(tree).find((node) => isPrototypeSceneNodeName(node.name, 'appRoot'));
+  const settings = appRoot === undefined ? null : findComponentInNode(appRoot, 'PrototypeSceneSettings', componentClasses);
+  const camera = appRoot === undefined ? null : findComponentInNode(appRoot, 'CameraController', componentClasses);
+  const settingsTarget = getSceneComponentTarget(settings);
+  if (roomRootResult.ok && roomRootResult.node.uuid !== undefined && settingsTarget !== undefined && camera !== null) {
+    return {
+      ok: true,
+      mode: 'grid',
+      node: roomRootResult.node,
+      settings: settingsTarget,
+      message: '已解析标准 RoomRoot，可按逻辑网格创建房间建筑',
+    };
+  }
+
+  // 多个 RoomRoot 表示场景结构冲突；已有选择无法安全消除歧义时不静默改挂到别处。
+  if (!roomRootResult.ok && roomRootResult.message.includes('多个 RoomRoot')) {
+    return { ok: false, mode: 'blocked', message: roomRootResult.message };
+  }
+
+  const canvas = resolveCanvasNode(tree, context, componentClasses);
+  if (canvas?.uuid !== undefined) {
+    return {
+      ok: true,
+      mode: 'canvas',
+      node: canvas,
+      message: '未发现完整标准骨架，将创建到 Canvas 顶层',
+    };
+  }
+  if (tree.uuid !== undefined) {
+    return {
+      ok: true,
+      mode: 'scene-root',
+      node: tree,
+      message: '未发现完整骨架和 Canvas，将创建到场景顶层；请在编辑器中确认 2D 可见性',
+    };
+  }
+  return { ok: false, mode: 'blocked', message: '当前场景缺少可用根节点，无法创建房间建筑' };
+}
+
 export function nextRoomInstanceId(
   tree: SceneNodeTree,
   definitionId: string,
@@ -74,28 +144,31 @@ export async function createRoomInstance(
   entry: RoomPrefabCatalogEntry,
 ): Promise<RoomSceneAuthoringResult> {
   const tree = await scene.queryNodeTree();
-  const roomRootResult = resolveRoomRoot(tree, context);
-  if (!roomRootResult.ok) return { ok: false, message: roomRootResult.message };
-  if (roomRootResult.node.uuid === undefined) return { ok: false, message: 'RoomRoot 缺少 UUID，无法创建房间' };
+  // 组件注册表只是 CID 兼容层；查询失败时仍可按节点名选择 Canvas/场景根。
+  const componentClasses = scene.queryComponents === undefined
+    ? []
+    : await scene.queryComponents().catch(() => []);
+  const placementTarget = resolveRoomPlacementTarget(tree, context, componentClasses);
+  if (!placementTarget.ok) return { ok: false, message: placementTarget.message };
+  if (placementTarget.node.uuid === undefined) return { ok: false, message: '放置目标缺少 UUID，无法创建房间' };
 
-  const componentClasses = scene.queryComponents === undefined ? [] : await scene.queryComponents();
-  const settingsTarget = findComponent(tree, 'PrototypeSceneSettings', componentClasses);
-  if (settingsTarget === null) {
-    return { ok: false, message: '场景缺少 PrototypeSceneSettings，请先初始化 Prototype 场景骨架' };
-  }
-  const position = await scene.executeComponentMethod(
-    settingsTarget.uuid,
-    'findFirstAvailableRoomPlacement',
-    [entry.width, entry.height],
-  ) as { readonly x?: number; readonly y?: number } | null;
-  if (position === null || !Number.isInteger(position?.x) || !Number.isInteger(position?.y)) {
-    return { ok: false, message: `没有可放置 ${entry.displayName} 的合法空位` };
+  let position: { readonly x: number; readonly y: number } | undefined;
+  if (placementTarget.mode === 'grid') {
+    const candidate = await scene.executeComponentMethod(
+      placementTarget.settings.uuid,
+      'findFirstAvailableRoomPlacement',
+      [entry.width, entry.height],
+    ) as { readonly x?: number; readonly y?: number } | null;
+    if (candidate === null || !Number.isInteger(candidate?.x) || !Number.isInteger(candidate?.y)) {
+      return { ok: false, message: `没有可放置 ${entry.displayName} 的合法空位` };
+    }
+    position = { x: candidate.x as number, y: candidate.y as number };
   }
   const existingIds = await collectRoomInstanceIds(scene, tree, componentClasses);
   let createdUuid: string | undefined;
   try {
     const created = await scene.createNode({
-      parent: roomRootResult.node.uuid,
+      parent: placementTarget.node.uuid,
       name: `房间-${entry.displayName}`,
       assetUuid: entry.prefabUuid,
       position: { x: 0, y: 0, z: 0 },
@@ -115,22 +188,47 @@ export async function createRoomInstance(
     if (!(await scene.setProperty(roomViewTarget, 'roomInstanceId', instanceId))) {
       throw new Error('无法写入房间实例 ID');
     }
-    const applied = await scene.executeComponentMethod(
-      roomViewUuid,
-      'applyEditorPlacement',
-      [{ x: position.x, y: position.y }],
-    );
-    if (applied !== true) throw new Error('无法把房间吸附到合法逻辑格');
+    if (placementTarget.mode === 'grid') {
+      const applied = await scene.executeComponentMethod(
+        roomViewUuid,
+        'applyEditorPlacement',
+        [{ x: position?.x, y: position?.y }],
+      );
+      if (applied !== true) throw new Error('无法把房间吸附到合法逻辑格');
+    }
 
     await scene.snapshot();
     selectNode(createdUuid);
     await focusNode(createdUuid);
-    return { ok: true, message: `已创建 ${entry.displayName}，实例 ID：${instanceId}`, nodeUuid: createdUuid };
+    const placementMessage = placementTarget.mode === 'grid'
+      ? '已按逻辑网格放置'
+      : placementTarget.mode === 'canvas' ? '已放到 Canvas 顶层' : '已放到场景顶层';
+    return { ok: true, message: `已创建 ${entry.displayName}，${placementMessage}，实例 ID：${instanceId}`, nodeUuid: createdUuid };
   } catch (error) {
     if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     await scene.snapshotAbort().catch(() => undefined);
     return { ok: false, message: `${toMessage(error)}；已回滚临时房间节点` };
   }
+}
+
+function resolveCanvasNode(
+  tree: SceneNodeTree,
+  context: SceneSelectionContext,
+  componentClasses: readonly SceneComponentClassInfo[],
+): SceneNodeTree | undefined {
+  const nodes = flattenTree(tree);
+  const byUuid = new Map(nodes.filter((node) => typeof node.uuid === 'string').map((node) => [node.uuid as string, node]));
+  let cursor = context.nodeUuid === undefined ? undefined : byUuid.get(context.nodeUuid);
+  while (cursor !== undefined) {
+    if (isCanvasNode(cursor, componentClasses)) return cursor;
+    cursor = cursor.parent === undefined ? undefined : byUuid.get(cursor.parent);
+  }
+  return nodes.find((node) => isCanvasNode(node, componentClasses));
+}
+
+function isCanvasNode(node: SceneNodeTree, componentClasses: readonly SceneComponentClassInfo[]): boolean {
+  return isPrototypeSceneNodeName(node.name, 'canvas')
+    || (node.components ?? []).some((component) => componentTypeMatches(component, 'Canvas', componentClasses));
 }
 
 function flattenTree(tree: SceneNodeTree): SceneNodeTree[] {
@@ -145,19 +243,6 @@ function flattenTree(tree: SceneNodeTree): SceneNodeTree[] {
 
 function findNode(tree: SceneNodeTree, uuid: string): SceneNodeTree | null {
   return flattenTree(tree).find((node) => node.uuid === uuid) ?? null;
-}
-
-function findComponent(
-  tree: SceneNodeTree,
-  type: string,
-  componentClasses: readonly SceneComponentClassInfo[],
-): SceneComponentTarget | null {
-  for (const node of flattenTree(tree)) {
-    const component = findComponentInNode(node, type, componentClasses);
-    const componentTarget = getSceneComponentTarget(component);
-    if (componentTarget !== undefined) return componentTarget;
-  }
-  return null;
 }
 
 function findComponentInNode(

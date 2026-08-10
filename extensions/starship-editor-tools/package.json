@@ -87,6 +87,9 @@
       "update-room-definition": {
         "methods": ["updateRoomDefinition"]
       },
+      "update-scene-core-settings": {
+        "methods": ["updateSceneCoreSettings"]
+      },
       "initialize-prototype-scene": {
         "methods": ["initializePrototypeScene"]
       }

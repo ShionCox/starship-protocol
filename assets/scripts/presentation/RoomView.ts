@@ -9,6 +9,7 @@ import {
   Input,
   JsonAsset,
   Node,
+  TransformBit,
   UITransform,
   Vec3,
   warn,
@@ -57,7 +58,6 @@ export class RoomView extends Component {
     displayName: '房间定义',
     tooltip: '仅供编辑器预览和 Web 原型使用；Windows 正式包不会导出此引用，运行时从 Secure ConfigRegistry 读取。',
     group: '房间定义',
-    editorOnly: true,
   })
   public definitionAsset: JsonAsset | null = null;
 
@@ -77,7 +77,9 @@ export class RoomView extends Component {
   public invalidPreviewBorderColor = new Color(255, 92, 92, 255);
 
   private editorPreviewSignature = '';
+  private editorRenderPositionSignature = '';
   private isSnappingInEditor = false;
+  private editorSnapScheduled = false;
   private definition: RoomDefinition | null = null;
   private placement: RoomPlacement | null = null;
   private sceneSettings: PrototypeSceneSettings | null = null;
@@ -98,7 +100,7 @@ export class RoomView extends Component {
     }
     if (EDITOR_NOT_IN_PREVIEW) {
       this.node.on(Node.EventType.TRANSFORM_CHANGED, this.handleEditorTransformChanged, this);
-      this.snapToEditorGrid();
+      this.scheduleEditorGridSnap();
     } else {
       this.node.on(Node.EventType.MOUSE_DOWN, this.handleRuntimeMouseDown, this);
     }
@@ -106,8 +108,20 @@ export class RoomView extends Component {
 
   protected onDisable(): void {
     this.node.off(Node.EventType.TRANSFORM_CHANGED, this.handleEditorTransformChanged, this);
+    this.unschedule(this.flushEditorGridSnap);
+    this.editorSnapScheduled = false;
     this.node.off(Node.EventType.MOUSE_DOWN, this.handleRuntimeMouseDown, this);
     this.stopRuntimeDrag();
+  }
+
+  /** Creator 编辑器在 Undo/Redo 恢复序列化状态后调用，用于重建非序列化预览缓存。 */
+  protected onRestore(): void {
+    if (!EDITOR_NOT_IN_PREVIEW) {
+      return;
+    }
+    this.editorPreviewSignature = '';
+    this.editorRenderPositionSignature = '';
+    this.scheduleEditorGridSnap();
   }
 
   protected update(): void {
@@ -157,7 +171,6 @@ export class RoomView extends Component {
     );
     if (local === null) return false;
     this.node.setPosition(local);
-    this.snapToEditorGrid();
     return true;
   }
 
@@ -175,6 +188,50 @@ export class RoomView extends Component {
       };
     }
     return { ok: true, message: `房间定义有效：${result.definition.displayName}（${result.definition.id}）` };
+  }
+
+  /**
+   * 编辑器面板只读取这份白名单 DTO，不把 Component、Node 或世界坐标对象泄露给扩展。
+   * 逻辑位置继续由 SceneSettings 统一换算，保证面板和运行时使用同一套网格基准。
+   */
+  public getAuthoringInspectorState(): {
+    readonly ok: boolean;
+    readonly message: string;
+    readonly roomInstanceId: string;
+    readonly roomDefinitionId: string;
+    readonly gridPosition?: GridPosition;
+  } {
+    const definitionResult = this.resolveRoomDefinition();
+    const sceneSettings = this.findSceneSettings();
+    const base = {
+      roomInstanceId: this.roomInstanceId.trim(),
+      roomDefinitionId: this.roomDefinitionId.trim(),
+    };
+    if (definitionResult.ok === false) {
+      return { ...base, ok: false, message: definitionResult.message };
+    }
+    if (sceneSettings === null) {
+      return { ...base, ok: false, message: '场景缺少 PrototypeSceneSettings，无法换算逻辑格位置' };
+    }
+    const parent = this.node.parent;
+    if (parent === null) {
+      return { ...base, ok: false, message: '房间缺少父节点，无法换算逻辑格位置' };
+    }
+    const gridPosition = sceneSettings.parentLocalCenterToGrid(
+      parent,
+      this.node.position,
+      definitionResult.definition.width,
+      definitionResult.definition.height,
+    );
+    if (gridPosition === null) {
+      return { ...base, ok: false, message: '房间世界坐标无法换算为有效逻辑格位置' };
+    }
+    return {
+      ...base,
+      ok: true,
+      message: `房间实例有效：${definitionResult.definition.displayName}`,
+      gridPosition,
+    };
   }
 
   /**
@@ -396,6 +453,7 @@ export class RoomView extends Component {
   }
 
   private refreshPreview(): void {
+    this.synchronizeEditorGraphicsTransform();
     const sceneSettings = this.findSceneSettings();
     const cellSize = sceneSettings?.cellSize ?? 48;
     const definitionResult = this.resolveRoomDefinition();
@@ -425,11 +483,70 @@ export class RoomView extends Component {
     }
     this.editorPreviewSignature = signature;
     this.draw(definition.width, definition.height, cellSize);
-    this.snapToEditorGrid();
+    this.scheduleEditorGridSnap();
   }
 
   private handleEditorTransformChanged(): void {
+    // TRANSFORM_CHANGED 在 Creator 撤销/重做回放尚未完全刷新世界矩阵时同步触发；
+    // 推迟到当前编辑操作结束后再吸附，避免读取旧矩阵并把错误位置再次写回撤销栈。
+    this.scheduleEditorGridSnap();
+  }
+
+  private scheduleEditorGridSnap(): void {
+    if (!EDITOR_NOT_IN_PREVIEW || this.isSnappingInEditor || this.editorSnapScheduled) {
+      return;
+    }
+    this.editorSnapScheduled = true;
+    this.scheduleOnce(this.flushEditorGridSnap, 0);
+  }
+
+  private flushEditorGridSnap(): void {
+    this.editorSnapScheduled = false;
+    if (!this.isValid || !this.node.isValid) {
+      return;
+    }
     this.snapToEditorGrid();
+    this.synchronizeEditorGraphicsTransform(true);
+  }
+
+  /**
+   * Creator 3.8.8 的 Graphics.onRestore 不会重跑 onEnable 中的 USE_LOCAL 材质初始化。
+   * Undo 后若该宏丢失，图形会忽略 Node 变换并固定在世界原点；这里检测公开 Pass defines，
+   * 仅在宏确实丢失时重启 Graphics 生命周期，再让当前帧重新上传节点矩阵和预览数据。
+   */
+  private synchronizeEditorGraphicsTransform(force = false): void {
+    if (!EDITOR_NOT_IN_PREVIEW || !this.isValid || !this.node.isValid) {
+      return;
+    }
+
+    const position = this.node.position;
+    const signature = `${position.x}|${position.y}|${position.z}`;
+    if (!force && signature === this.editorRenderPositionSignature) {
+      return;
+    }
+    const graphics = this.getComponent(Graphics);
+    if (graphics === null) {
+      return;
+    }
+
+    const material = graphics.getRenderMaterial(0);
+    const passes = material?.passes;
+    if (!Array.isArray(passes) || passes.length === 0) {
+      return;
+    }
+    const usesLocalCoordinates = passes.some((pass) => {
+      const value = pass?.defines?.USE_LOCAL;
+      return value === true || value === 1;
+    });
+    if (!usesLocalCoordinates) {
+      // 不切换 enabled：编辑器会把它视为新的序列化修改并清空 Redo 栈。
+      // MaterialInstance 的 shader 宏不是场景业务数据，可以安全地原地恢复。
+      graphics.getMaterialInstance(0)?.recompileShaders({ USE_LOCAL: true });
+    }
+
+    this.editorRenderPositionSignature = signature;
+    this.node.invalidateChildren(TransformBit.POSITION);
+    graphics.markForUpdateRenderData(true);
   }
 
   /** 编辑器坐标只用于设计输入；最终仍转换为 GameCore 的整数逻辑坐标。 */
@@ -449,8 +566,9 @@ export class RoomView extends Component {
     }
     const definition = definitionResult.definition;
 
-    const gridPosition = sceneSettings.worldCenterToGrid(
-      this.node.worldPosition,
+    const gridPosition = sceneSettings.parentLocalCenterToGrid(
+      parent,
+      this.node.position,
       definition.width,
       definition.height,
     );
@@ -458,9 +576,20 @@ export class RoomView extends Component {
       return;
     }
 
+    const maxX = sceneSettings.gridColumns - definition.width;
+    const maxY = sceneSettings.gridRows - definition.height;
+    if (maxX < 0 || maxY < 0) {
+      return;
+    }
+    // 逻辑换算在网格外仍会返回整数；编辑器吸附不应把撤销回放后的像素位置
+    // 永久保存在网格外，因此把候选格限制在房间尺寸允许的边界内。
+    const boundedGridPosition = {
+      x: Math.min(Math.max(gridPosition.x, 0), maxX),
+      y: Math.min(Math.max(gridPosition.y, 0), maxY),
+    };
     const snappedParentCenter = sceneSettings.gridPositionToParentLocal(
       parent,
-      gridPosition,
+      boundedGridPosition,
       definition.width,
       definition.height,
     );
@@ -478,6 +607,7 @@ export class RoomView extends Component {
   }
 
   private findSceneSettings(): PrototypeSceneSettings | null {
-    return this.node.scene.getComponentInChildren(PrototypeSceneSettings);
+    const scene = this.node.scene;
+    return scene === null ? null : scene.getComponentInChildren(PrototypeSceneSettings);
   }
 }
