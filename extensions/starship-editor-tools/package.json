@@ -1,6 +1,6 @@
 {
   "package_version": 2,
-  "version": "1.3.0",
+  "version": "1.5.0",
   "name": "starship-editor-tools",
   "description": "i18n:starship-editor-tools.description",
   "main": "./dist/main.js",
@@ -43,12 +43,12 @@
   "contributions": {
     "menu": [
       {
-        "path": "i18n:menu.project/i18n:starship-editor-tools.title",
+        "path": "i18n:menu.project",
         "label": "i18n:starship-editor-tools.open_authoring",
         "message": "open-authoring-panel"
       },
       {
-        "path": "i18n:menu.panel/i18n:starship-editor-tools.title",
+        "path": "i18n:menu.panel",
         "label": "i18n:starship-editor-tools.open_authoring",
         "message": "open-authoring-panel"
       }
@@ -65,6 +65,9 @@
       },
       "create-room-content": {
         "methods": ["createRoomContent"]
+      },
+      "create-crew-content": {
+        "methods": ["createCrewContent"]
       },
       "open-created-prefab": {
         "methods": ["openCreatedPrefab"]
@@ -84,14 +87,35 @@
       "create-room-instance": {
         "methods": ["createRoomInstance"]
       },
+      "create-crew-instance": {
+        "methods": ["createCrewInstance"]
+      },
       "update-room-definition": {
         "methods": ["updateRoomDefinition"]
+      },
+      "update-crew-definition": {
+        "methods": ["updateCrewDefinition"]
       },
       "update-scene-core-settings": {
         "methods": ["updateSceneCoreSettings"]
       },
       "initialize-prototype-scene": {
         "methods": ["initializePrototypeScene"]
+      },
+      "configure-r1-energy-scene": {
+        "methods": ["configureR1EnergyScene"]
+      },
+      "configure-r1-crew-scene": {
+        "methods": ["configureR1CrewScene"]
+      },
+      "create-crew-member-template": {
+        "methods": ["createCrewMemberTemplate"]
+      },
+      "create-power-room-row-template": {
+        "methods": ["createPowerRoomRowTemplate"]
+      },
+      "replace-power-rows-with-prefab": {
+        "methods": ["replacePowerRowsWithPrefab"]
       }
     }
   }

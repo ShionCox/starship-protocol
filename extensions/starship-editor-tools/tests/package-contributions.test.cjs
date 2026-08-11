@@ -8,6 +8,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'packa
 test('扩展清单保留资源菜单，并只提供公开创作面板入口', () => {
   const menu = packageJson.contributions?.menu ?? [];
   assert.equal(menu.length, 2);
+  assert.deepEqual(menu.map((item) => item.path), ['i18n:menu.project', 'i18n:menu.panel']);
   assert.ok(menu.every((item) => item.label === 'i18n:starship-editor-tools.open_authoring' && item.message === 'open-authoring-panel'));
   assert.equal(packageJson.panels.authoring.type, 'dockable');
   assert.equal(packageJson.panels.authoring.main, './dist/panels/authoring-panel');
@@ -16,6 +17,12 @@ test('扩展清单保留资源菜单，并只提供公开创作面板入口', ()
   assert.ok(packageJson.contributions?.messages?.['create-room-instance']);
   assert.ok(packageJson.contributions?.messages?.['update-room-definition']);
   assert.ok(packageJson.contributions?.messages?.['get-authoring-state']);
+  assert.ok(packageJson.contributions?.messages?.['configure-r1-energy-scene']);
+  assert.ok(packageJson.contributions?.messages?.['create-crew-content']);
+  assert.ok(packageJson.contributions?.messages?.['create-crew-instance']);
+  assert.ok(packageJson.contributions?.messages?.['update-crew-definition']);
+  assert.ok(packageJson.contributions?.messages?.['configure-r1-crew-scene']);
+  assert.equal(packageJson.version, '1.5.0');
   assert.equal(JSON.stringify(packageJson).includes(['hierarchy', 'menu-adapter'].join('-')), false);
   assert.equal(JSON.stringify(packageJson).includes(['open', 'room', 'catalog'].join('-')), false);
 });

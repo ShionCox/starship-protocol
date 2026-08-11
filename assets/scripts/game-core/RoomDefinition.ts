@@ -25,6 +25,8 @@ export interface RoomDefinition {
   readonly maxHp: number;
   readonly minPower: number;
   readonly maxPower: number;
+  /** R1 能源纵切：能源房间每个实例提供的基础产能；旧配置缺省为 0。 */
+  readonly powerGeneration: number;
   readonly crewCapacity: number;
 }
 
@@ -55,6 +57,18 @@ export type RoomDefinitionParseResult =
   };
 
 const ROOM_ID_PATTERN = /^room-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ROOM_CATEGORY_LABELS: Readonly<Record<RoomCategory, string>> = {
+  ENERGY: '能源',
+  WEAPON: '武器',
+  DEFENSE: '防御',
+  MOBILITY: '机动',
+  SUPPORT: '支援',
+  MOVEMENT: '移动',
+  TACTICAL: '战术',
+  DRONE: '无人机',
+  ECONOMY: '经济',
+  SPECIAL: '特殊',
+};
 
 /** 将不可信 JSON 数据转换为经过校验的房间规则。 */
 export function parseRoomDefinition(value: unknown): RoomDefinitionParseResult {
@@ -86,25 +100,38 @@ export function parseRoomDefinition(value: unknown): RoomDefinitionParseResult {
   ) {
     return failure('INVALID_NUMBER_RANGE', '能源范围必须是非负整数，且最低能源不能大于最高能源');
   }
+  const powerGeneration = value.powerGeneration;
+  let normalizedPowerGeneration = 0;
+  if (powerGeneration !== undefined) {
+    if (!isNonNegativeInteger(powerGeneration)) {
+      return failure('INVALID_NUMBER_RANGE', '能源产能必须是非负整数');
+    }
+    normalizedPowerGeneration = powerGeneration;
+  }
+  if (value.category !== 'ENERGY' && normalizedPowerGeneration > 0) {
+    return failure(
+      'INVALID_NUMBER_RANGE',
+      `“${ROOM_CATEGORY_LABELS[value.category]}”房间的能源产能必须为 0`,
+    );
+  }
   if (!isNonNegativeInteger(value.crewCapacity)) {
     return failure('INVALID_NUMBER_RANGE', '船员容量必须是非负整数');
   }
 
-  return {
-    ok: true,
-    definition: Object.freeze({
-      id: value.id,
-      displayName: value.displayName.trim(),
-      category: value.category,
-      width: value.width,
-      height: value.height,
-      maxLevel: value.maxLevel,
-      maxHp: value.maxHp,
-      minPower: value.minPower,
-      maxPower: value.maxPower,
-      crewCapacity: value.crewCapacity,
-    }),
+  const definition: RoomDefinition = {
+    id: value.id,
+    displayName: value.displayName.trim(),
+    category: value.category,
+    width: value.width,
+    height: value.height,
+    maxLevel: value.maxLevel,
+    maxHp: value.maxHp,
+    minPower: value.minPower,
+    maxPower: value.maxPower,
+    crewCapacity: value.crewCapacity,
+    powerGeneration: normalizedPowerGeneration,
   };
+  return { ok: true, definition: Object.freeze(definition) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

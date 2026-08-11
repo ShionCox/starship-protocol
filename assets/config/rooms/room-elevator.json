@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "room-elevator",
+  "displayName": "电梯",
+  "category": "MOVEMENT",
+  "width": 2,
+  "height": 2,
+  "maxLevel": 1,
+  "maxHp": 100,
+  "minPower": 0,
+  "maxPower": 0,
+  "powerGeneration": 0,
+  "crewCapacity": 1
+}

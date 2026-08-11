@@ -24,6 +24,7 @@ export interface RoomCreationRequest {
   readonly maxHp: number;
   readonly minPower: number;
   readonly maxPower: number;
+  readonly powerGeneration?: number;
   readonly crewCapacity: number;
   readonly prefabName: string;
   readonly templateUrl: string;
@@ -42,6 +43,18 @@ export type RoomCreationResult =
 const ROOM_ID_PATTERN = /^room-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PREFAB_NAME_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
 const PREFAB_ROOT = 'db://assets/prefabs';
+const CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  ENERGY: '能源',
+  WEAPON: '武器',
+  DEFENSE: '防御',
+  MOBILITY: '机动',
+  SUPPORT: '支援',
+  MOVEMENT: '移动',
+  TACTICAL: '战术',
+  DRONE: '无人机',
+  ECONOMY: '经济',
+  SPECIAL: '特殊',
+};
 
 /**
  * 创建房间 JSON 与 Prefab 副本。
@@ -58,18 +71,19 @@ export async function createRoomContent(
   }
 
   const targetDirectory = request.targetDirectory.replace(/\/$/, '');
+  const powerGeneration = request.powerGeneration ?? 0;
   const configUrl = `${ROOM_CONFIG_DIRECTORY}/${request.id}.json`;
   const prefabUrl = `${targetDirectory}/${request.prefabName}.prefab`;
 
   try {
     if (!(await assetDb.queryUuid(request.templateUrl))) {
-      return { ok: false, message: `模板 Prefab 不存在：${request.templateUrl}` };
+      return { ok: false, message: `模板预制体不存在：${request.templateUrl}` };
     }
     if (await assetDb.queryUuid(configUrl)) {
       return { ok: false, message: `房间定义已存在：${configUrl}` };
     }
     if (await assetDb.queryUuid(prefabUrl)) {
-      return { ok: false, message: `目标 Prefab 已存在：${prefabUrl}` };
+      return { ok: false, message: `目标预制体已存在：${prefabUrl}` };
     }
 
     const document = {
@@ -83,6 +97,7 @@ export async function createRoomContent(
       maxHp: request.maxHp,
       minPower: request.minPower,
       maxPower: request.maxPower,
+      powerGeneration,
       crewCapacity: request.crewCapacity,
     };
     const createdConfig = await assetDb.createAsset(configUrl, `${JSON.stringify(document, null, 2)}\n`);
@@ -93,7 +108,7 @@ export async function createRoomContent(
     try {
       const createdPrefab = await assetDb.copyAsset(request.templateUrl, prefabUrl);
       if (createdPrefab === null) {
-        throw new Error(`复制 Prefab 失败：${prefabUrl}`);
+        throw new Error(`复制预制体失败：${prefabUrl}`);
       }
     } catch (copyError) {
       let rollbackMessage = '';
@@ -118,19 +133,19 @@ export async function createRoomContent(
 
 function validateRequest(request: RoomCreationRequest): string | null {
   if (!ROOM_ID_PATTERN.test(request.id)) {
-    return '房间 ID 必须使用 room- 开头的小写 kebab-case';
+    return '房间标识必须使用 room- 开头的小写短横线格式';
   }
   if (request.displayName.trim().length === 0) {
     return '中文名称不能为空';
   }
   if (!(ROOM_CATEGORIES as readonly string[]).includes(request.category)) {
-    return `未知房间分类：${request.category}`;
+    return `未知房间分类：${CATEGORY_LABELS[request.category] ?? request.category}`;
   }
   if (!PREFAB_NAME_PATTERN.test(request.prefabName)) {
-    return 'Prefab 名称必须使用 PascalCase，且只能包含英文字母和数字';
+    return '预制体名称必须使用大写开头格式，且只能包含英文字母和数字';
   }
   if (!isPrefabUrl(request.templateUrl)) {
-    return '模板必须是 assets/prefabs 下的 Prefab';
+    return '模板必须是 assets/prefabs 下的预制体';
   }
   if (!isPrefabDirectory(request.targetDirectory)) {
     return '目标目录必须位于 assets/prefabs 下';
@@ -147,6 +162,12 @@ function validateRequest(request: RoomCreationRequest): string | null {
     request.minPower > request.maxPower
   ) {
     return '能源范围必须是非负整数，且最低能源不能大于最高能源';
+  }
+  if (request.powerGeneration !== undefined && !isNonNegativeInteger(request.powerGeneration)) {
+    return '能源产能必须是非负整数';
+  }
+  if (request.category !== 'ENERGY' && (request.powerGeneration ?? 0) > 0) {
+    return `“${CATEGORY_LABELS[request.category] ?? request.category}”房间的能源产能必须为 0`;
   }
   if (!isNonNegativeInteger(request.crewCapacity)) {
     return '船员容量必须是非负整数';

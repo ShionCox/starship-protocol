@@ -29,6 +29,7 @@ export interface RoomPrefabCatalogEntry {
   readonly maxHp: number;
   readonly minPower: number;
   readonly maxPower: number;
+  readonly powerGeneration: number;
   readonly crewCapacity: number;
   readonly prefabUrl: string;
   readonly prefabUuid: string;
@@ -52,6 +53,7 @@ export interface RoomDefinitionDocument {
   readonly maxHp: number;
   readonly minPower: number;
   readonly maxPower: number;
+  readonly powerGeneration: number;
   readonly crewCapacity: number;
 }
 
@@ -117,6 +119,7 @@ export async function discoverRoomPrefabs(assetDb: AssetDbPort): Promise<RoomDis
         maxHp: document.maxHp,
         minPower: document.minPower,
         maxPower: document.maxPower,
+        powerGeneration: document.powerGeneration,
         crewCapacity: document.crewCapacity,
         prefabUrl: prefab.url,
         prefabUuid: prefab.uuid,
@@ -174,10 +177,13 @@ export function parseRoomDefinition(value: unknown): RoomDefinitionDocument | nu
     !isNonNegativeInteger(value.minPower) ||
     !isNonNegativeInteger(value.maxPower) ||
     value.minPower > value.maxPower ||
+    (value.powerGeneration !== undefined && !isNonNegativeInteger(value.powerGeneration)) ||
     !isNonNegativeInteger(value.crewCapacity)
   ) {
     return null;
   }
+  const powerGeneration = value.powerGeneration === undefined ? 0 : value.powerGeneration as number;
+  if (value.category !== 'ENERGY' && powerGeneration > 0) return null;
   return {
     schemaVersion: 1,
     id: value.id,
@@ -189,6 +195,7 @@ export function parseRoomDefinition(value: unknown): RoomDefinitionDocument | nu
     maxHp: value.maxHp,
     minPower: value.minPower,
     maxPower: value.maxPower,
+    powerGeneration,
     crewCapacity: value.crewCapacity,
   };
 }

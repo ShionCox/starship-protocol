@@ -14,8 +14,10 @@ export const PROTOTYPE_SCENE_NODE_ALIASES = {
   shipRoot: ['飞船根', 'ShipRoot'],
   gridRoot: ['网格根', 'GridRoot'],
   roomRoot: ['房间容器', 'RoomRoot'],
+  crewRoot: ['船员层', 'CrewRoot'],
   previewRoot: ['预览根', 'PreviewRoot'],
   uiRoot: ['界面根', 'UIRoot'],
+  hudLayer: ['HUD层', 'HudLayer'],
   appRoot: ['应用根', 'AppRoot'],
 } as const;
 

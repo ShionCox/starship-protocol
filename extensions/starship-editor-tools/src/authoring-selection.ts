@@ -1,4 +1,5 @@
 import type { RoomPrefabCatalogEntry } from './rooms/discover-room-prefabs';
+import type { CrewPrefabCatalogEntry } from './crew/discover-crew-prefabs';
 import { isPrototypeSceneNodeName, type PrototypeSceneNodeKey } from './scene/prototype-scene-names';
 import {
   componentTypeMatches,
@@ -9,8 +10,8 @@ import {
   type SceneQueryPort,
 } from './shared/editor-scene';
 
-export type AuthoringPageId = 'scene' | 'rooms' | 'validation';
-export type AuthoringSelectionKind = 'none' | 'room-instance' | 'scene-settings' | 'semantic-node' | 'node';
+export type AuthoringPageId = 'scene' | 'rooms' | 'crew' | 'validation';
+export type AuthoringSelectionKind = 'none' | 'room-instance' | 'crew-instance' | 'scene-settings' | 'semantic-node' | 'node';
 
 export interface AuthoringNodeBase {
   readonly uuid?: string;
@@ -32,6 +33,18 @@ export interface AuthoringRoomSelection extends AuthoringNodeBase {
   readonly instanceId?: string;
   readonly definitionId?: string;
   readonly gridPosition?: { readonly x: number; readonly y: number };
+  readonly validation: { readonly ok: boolean; readonly message: string };
+  readonly definitionFound: boolean;
+}
+
+export interface AuthoringCrewSelection extends AuthoringNodeBase {
+  readonly kind: 'crew-instance';
+  readonly typeId: 'crew-instance';
+  readonly page: 'crew';
+  readonly instanceId?: string;
+  readonly definitionId?: string;
+  readonly initialRoomInstanceId?: string;
+  readonly initialStationIndex?: number;
   readonly validation: { readonly ok: boolean; readonly message: string };
   readonly definitionFound: boolean;
 }
@@ -80,6 +93,7 @@ export interface AuthoringNodeSelection extends AuthoringNodeBase {
 export type AuthoringSelection =
   | AuthoringNoneSelection
   | AuthoringRoomSelection
+  | AuthoringCrewSelection
   | AuthoringSceneSettingsSelection
   | AuthoringSemanticSelection
   | AuthoringNodeSelection;
@@ -90,6 +104,7 @@ export interface AuthoringObjectRecognizerContext {
   readonly componentClasses: readonly SceneComponentClassInfo[];
   readonly scene: SceneQueryPort;
   readonly rooms: readonly RoomPrefabCatalogEntry[];
+  readonly crews: readonly CrewPrefabCatalogEntry[];
 }
 
 export interface AuthoringObjectRecognizer {
@@ -103,6 +118,7 @@ export interface AuthoringObjectRecognizer {
  */
 export const authoringObjectRecognizers: readonly AuthoringObjectRecognizer[] = [
   { typeId: 'room-instance', recognize: recognizeRoomInstance },
+  { typeId: 'crew-instance', recognize: recognizeCrewInstance },
   { typeId: 'scene-settings', recognize: recognizeSceneSettings },
   { typeId: 'semantic-node', recognize: recognizeSemanticNode },
   { typeId: 'node', recognize: recognizeNode },
@@ -117,6 +133,48 @@ export async function recognizeAuthoringSelection(context: AuthoringObjectRecogn
     if (selection !== null) return selection;
   }
   return { kind: 'node', typeId: 'node', page: 'scene', ...nodeInfo(context.selectedNode, context.tree) };
+}
+
+async function recognizeCrewInstance(context: AuthoringObjectRecognizerContext): Promise<AuthoringCrewSelection | null> {
+  const node = context.selectedNode;
+  if (node === undefined) return null;
+  const component = findComponentInNode(node, 'CrewView', context.componentClasses);
+  const componentUuid = getSceneComponentUuid(component);
+  if (componentUuid === undefined) return null;
+  let inspector: CrewInspectorResult | null = null;
+  try {
+    inspector = await context.scene.executeComponentMethod(componentUuid, 'getAuthoringInspectorState', []) as CrewInspectorResult | null;
+  } catch {
+    // 旧 CrewView 仍通过公开 query-component 读取白名单字段。
+  }
+  if (inspector === null || typeof inspector !== 'object') {
+    try {
+      const queried = await context.scene.queryComponent(componentUuid);
+      inspector = {
+        ok: false,
+        message: '当前 CrewView 脚本未提供编辑器查询状态',
+        crewInstanceId: readStringProperty(queried?.value?.crewInstanceId),
+        crewDefinitionId: readStringProperty(queried?.value?.crewDefinitionId),
+        initialRoomInstanceId: readStringProperty(queried?.value?.initialRoomInstanceId),
+        initialStationIndex: readFiniteNumber(unwrapRecord(queried?.value), 'initialStationIndex'),
+      };
+    } catch {
+      inspector = { ok: false, message: '无法读取 CrewView 实例状态' };
+    }
+  }
+  const definitionId = normalizeOptionalString(inspector.crewDefinitionId);
+  return {
+    kind: 'crew-instance',
+    typeId: 'crew-instance',
+    page: 'crew',
+    ...nodeInfo(node, context.tree),
+    instanceId: normalizeOptionalString(inspector.crewInstanceId),
+    definitionId,
+    initialRoomInstanceId: normalizeOptionalString(inspector.initialRoomInstanceId),
+    initialStationIndex: typeof inspector.initialStationIndex === 'number' && Number.isInteger(inspector.initialStationIndex) ? inspector.initialStationIndex : undefined,
+    validation: { ok: inspector.ok === true, message: typeof inspector.message === 'string' && inspector.message !== '' ? inspector.message : '未返回船员校验状态' },
+    definitionFound: definitionId !== undefined && context.crews.some((entry) => entry.id === definitionId),
+  };
 }
 
 async function recognizeRoomInstance(context: AuthoringObjectRecognizerContext): Promise<AuthoringRoomSelection | null> {
@@ -205,7 +263,7 @@ async function recognizeSemanticNode(context: AuthoringObjectRecognizerContext):
   const node = context.selectedNode;
   if (node === undefined) return null;
   const keys: readonly PrototypeSceneNodeKey[] = [
-    'mainCamera', 'canvas', 'background', 'worldRoot', 'shipRoot', 'gridRoot', 'roomRoot', 'previewRoot', 'uiRoot', 'appRoot',
+    'mainCamera', 'canvas', 'background', 'worldRoot', 'shipRoot', 'gridRoot', 'roomRoot', 'crewRoot', 'previewRoot', 'uiRoot', 'hudLayer', 'appRoot',
   ];
   const semanticRole = keys.find((key) => isPrototypeSceneNodeName(node.name, key));
   if (semanticRole === undefined) return null;
@@ -223,6 +281,15 @@ interface RoomInspectorResult {
   readonly roomInstanceId?: unknown;
   readonly roomDefinitionId?: unknown;
   readonly gridPosition?: unknown;
+}
+
+interface CrewInspectorResult {
+  readonly ok?: boolean;
+  readonly message?: string;
+  readonly crewInstanceId?: unknown;
+  readonly crewDefinitionId?: unknown;
+  readonly initialRoomInstanceId?: unknown;
+  readonly initialStationIndex?: unknown;
 }
 
 function findComponentInNode(

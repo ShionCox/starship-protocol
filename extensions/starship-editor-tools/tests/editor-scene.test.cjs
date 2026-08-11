@@ -52,3 +52,29 @@ test('场景回滚可显式关闭 Undo 记录', async () => {
   assert.equal(calls[0][2].record, false);
   delete global.Editor;
 });
+
+test('颜色属性通过公开 Scene 消息保留 cc.Color 类型 dump', async () => {
+  const calls = [];
+  global.Editor = { Message: { request: async (...args) => { calls.push(args); return true; } } };
+  await editorSceneQuery.setProperty(
+    { uuid: 'room-view', nodeUuid: 'room', index: 2 },
+    'fillColor',
+    { type: 'cc.Color', value: { r: 170, g: 45, b: 55, a: 245 } },
+  );
+  assert.deepEqual(calls[0][2].dump, { type: 'cc.Color', value: { r: 170, g: 45, b: 55, a: 245 } });
+  delete global.Editor;
+});
+
+test('公开 recording 消息组成单次原子 Undo', async () => {
+  const calls = [];
+  global.Editor = { Message: { request: async (...args) => { calls.push(args); return args[1] === 'begin-recording' ? 'undo-1' : undefined; } } };
+  const undoId = await editorSceneQuery.beginRecording('room-root');
+  await editorSceneQuery.endRecording(undoId);
+  await editorSceneQuery.cancelRecording(undoId);
+  assert.deepEqual(calls, [
+    ['scene', 'begin-recording', 'room-root'],
+    ['scene', 'end-recording', 'undo-1'],
+    ['scene', 'cancel-recording', 'undo-1'],
+  ]);
+  delete global.Editor;
+});

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "room-laser",
+  "displayName": "激光室",
+  "category": "WEAPON",
+  "width": 2,
+  "height": 2,
+  "maxLevel": 1,
+  "maxHp": 100,
+  "minPower": 2,
+  "maxPower": 6,
+  "powerGeneration": 0,
+  "crewCapacity": 2
+}

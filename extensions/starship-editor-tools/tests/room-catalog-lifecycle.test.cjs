@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-test('房间目录监听只对房间资源去抖刷新，并在卸载时注销', async () => {
+test('房间与船员目录监听只对创作资源去抖刷新，并在卸载时注销', async () => {
   const listeners = new Map();
   const removed = [];
   let queryAssetsCount = 0;
@@ -55,8 +55,8 @@ test('房间目录监听只对房间资源去抖刷新，并在卸载时注销',
     catalogVersion = 1;
     listeners.get('asset-db:asset-change')('room-config');
     await wait(240);
-    assert.equal(queryAssetsCount, initialQueries + 1);
-    assert.equal(broadcasts.length, 2);
+    assert.equal(queryAssetsCount, initialQueries + 2);
+    assert.equal(broadcasts.length, 3);
 
     main.unload();
     assert.equal(removed.length, 1);

@@ -34,21 +34,22 @@ const { ccclass, executeInEditMode, menu, property } = _decorator;
 
 type RoomMoveHandler = (command: MoveRoomCommand) => PlacementValidation;
 type PanBlockHandler = (blocked: boolean) => void;
+type RoomClickHandler = (roomInstanceId: string) => void;
 
 @ccclass('RoomView')
 @executeInEditMode
 @menu('星舰协议/场景表现/房间视图')
 export class RoomView extends Component {
   @property({
-    displayName: '房间实例 ID',
-    tooltip: '同一场景内必须唯一；存档和移动命令使用这个稳定字符串 ID。',
+    displayName: '房间实例标识',
+    tooltip: '同一场景内必须唯一；存档和移动命令使用这个稳定字符串标识。',
     group: '房间实例',
   })
   public roomInstanceId = 'room-reactor-1';
 
   @property({
-    displayName: '房间定义 ID',
-    tooltip: '正式包从 Secure ConfigRegistry 按此稳定 ID 取规则；必须与绑定 JSON 的 id 一致。',
+    displayName: '房间定义标识',
+    tooltip: '正式包从受认证配置注册表按此稳定标识取规则；必须与绑定房间规则文件的标识一致。',
     group: '房间定义',
   })
   public roomDefinitionId = 'room-reactor';
@@ -56,7 +57,7 @@ export class RoomView extends Component {
   @property({
     type: JsonAsset,
     displayName: '房间定义',
-    tooltip: '仅供编辑器预览和 Web 原型使用；Windows 正式包不会导出此引用，运行时从 Secure ConfigRegistry 读取。',
+    tooltip: '仅供编辑器预览和网页原型使用；Windows 正式包不会导出此引用，运行时从受认证配置注册表读取。',
     group: '房间定义',
   })
   public definitionAsset: JsonAsset | null = null;
@@ -86,6 +87,7 @@ export class RoomView extends Component {
   private previewRoomMove: RoomMoveHandler | null = null;
   private commitRoomMove: RoomMoveHandler | null = null;
   private setPanBlocked: PanBlockHandler | null = null;
+  private handleRoomClick: RoomClickHandler | null = null;
   private runtimeCanvas: Node | null = null;
   private readonly runtimeDragOffset = new Vec3();
   private readonly runtimePointerWorld = new Vec3();
@@ -93,6 +95,9 @@ export class RoomView extends Component {
   private runtimeCandidate: MoveRoomCommand | null = null;
   private runtimeCandidateValidation: PlacementValidation | null = null;
   private isDraggingAtRuntime = false;
+  private runtimePointerStartX = 0;
+  private runtimePointerStartY = 0;
+  private runtimePointerMoved = false;
 
   protected onEnable(): void {
     if (!NATIVE || EDITOR_NOT_IN_PREVIEW) {
@@ -191,6 +196,15 @@ export class RoomView extends Component {
   }
 
   /**
+   * 仅供项目创作插件把复制出的房间 Prefab 转换成其他模板。
+   * 组件销毁仍通过 Cocos 公共对象生命周期完成，转换后的资源必须由 Creator 保存。
+   */
+  public removeForAuthoringTemplateConversion(): boolean {
+    this.destroy();
+    return true;
+  }
+
+  /**
    * 编辑器面板只读取这份白名单 DTO，不把 Component、Node 或世界坐标对象泄露给扩展。
    * 逻辑位置继续由 SceneSettings 统一换算，保证面板和运行时使用同一套网格基准。
    */
@@ -199,6 +213,7 @@ export class RoomView extends Component {
     readonly message: string;
     readonly roomInstanceId: string;
     readonly roomDefinitionId: string;
+    readonly crewCapacity?: number;
     readonly gridPosition?: GridPosition;
   } {
     const definitionResult = this.resolveRoomDefinition();
@@ -230,6 +245,7 @@ export class RoomView extends Component {
       ...base,
       ok: true,
       message: `房间实例有效：${definitionResult.definition.displayName}`,
+      crewCapacity: definitionResult.definition.crewCapacity,
       gridPosition,
     };
   }
@@ -244,6 +260,7 @@ export class RoomView extends Component {
     previewRoomMove: RoomMoveHandler | null = null,
     commitRoomMove: RoomMoveHandler | null = null,
     setPanBlocked: PanBlockHandler | null = null,
+    handleRoomClick: RoomClickHandler | null = null,
   ): void {
     const parent = this.node.parent;
     const roomCenter = parent === null
@@ -260,6 +277,7 @@ export class RoomView extends Component {
     this.previewRoomMove = previewRoomMove;
     this.commitRoomMove = commitRoomMove;
     this.setPanBlocked = setPanBlocked;
+    this.handleRoomClick = handleRoomClick;
     this.node.name = `Room-${placement.id}`;
     this.node.setPosition(roomCenter);
     this.draw(definition.width, definition.height, sceneSettings.cellSize);
@@ -336,6 +354,10 @@ export class RoomView extends Component {
     this.setPanBlocked?.(true);
     this.runtimeCanvas = canvas;
     const pointerWorld = this.getPointerWorld(event);
+    const pointerLocation = event.getUILocation();
+    this.runtimePointerStartX = pointerLocation.x;
+    this.runtimePointerStartY = pointerLocation.y;
+    this.runtimePointerMoved = false;
     Vec3.subtract(this.runtimeDragOffset, this.node.worldPosition, pointerWorld);
     canvas.on(Node.EventType.MOUSE_MOVE, this.handleRuntimeMouseMove, this);
     canvas.on(Node.EventType.MOUSE_UP, this.handleRuntimeMouseUp, this);
@@ -355,6 +377,13 @@ export class RoomView extends Component {
     }
 
     event.propagationStopped = true;
+    const location = event.getUILocation();
+    if (!this.runtimePointerMoved) {
+      const deltaX = location.x - this.runtimePointerStartX;
+      const deltaY = location.y - this.runtimePointerStartY;
+      if (deltaX * deltaX + deltaY * deltaY < 36) return;
+      this.runtimePointerMoved = true;
+    }
     const pointerWorld = this.getPointerWorld(event);
     const candidateWorld = Vec3.add(this.runtimeCandidateWorld, pointerWorld, this.runtimeDragOffset);
     const gridPosition = this.sceneSettings.worldCenterToGrid(
@@ -400,6 +429,13 @@ export class RoomView extends Component {
     }
 
     event.propagationStopped = true;
+    if (!this.runtimePointerMoved) {
+      if (this.placement !== null) this.handleRoomClick?.(this.placement.id);
+      this.restoreRuntimePlacement();
+      this.drawRuntimeNormalState();
+      this.stopRuntimeDrag();
+      return;
+    }
     const command = this.runtimeCandidate;
     const preview = this.runtimeCandidateValidation;
     const committed = command !== null && preview?.ok === true && this.commitRoomMove?.(command).ok === true;
@@ -443,6 +479,7 @@ export class RoomView extends Component {
     this.runtimeCandidate = null;
     this.runtimeCandidateValidation = null;
     this.isDraggingAtRuntime = false;
+    this.runtimePointerMoved = false;
     this.setPanBlocked?.(false);
   }
 

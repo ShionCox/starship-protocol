@@ -8,6 +8,7 @@ function baseTree(selected) {
 }
 
 const rooms = [{ id: 'room-reactor', displayName: '反应堆', category: 'ENERGY', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, crewCapacity: 0, prefabUrl: 'db://assets/prefabs/ReactorRoom.prefab', prefabUuid: 'prefab', configUrl: 'db://assets/config/rooms/room-reactor.json', configUuid: 'config' }];
+const crews = [{ schemaVersion: 1, id: 'crew-engineer', displayName: '工程师', role: 'ENGINEER', maxHp: 100, moveTicksPerEdge: 5, prefabUrl: 'db://assets/prefabs/EngineerCrew.prefab', prefabUuid: 'crew-prefab', configUrl: 'db://assets/config/crew/crew-engineer.json', configUuid: 'crew-config' }];
 
 test('按 RoomView 类名或压缩 CID 识别房间实例，并只返回白名单状态', async () => {
   const selected = { uuid: 'room-node', name: '房间-反应堆', parent: 'scene', position: { x: 10, y: 20, z: 0 }, components: [{ type: 'cid-room', value: 'room-view', index: 0 }], children: [] };
@@ -26,6 +27,17 @@ test('按 RoomView 类名或压缩 CID 识别房间实例，并只返回白名�
   assert.deepEqual(state.gridPosition, { x: 2, y: 3 });
   assert.equal(state.raw, undefined);
   assert.equal(state.definitionFound, true);
+});
+
+test('识别顺序在房间后识别 CrewView 压缩 CID，并只返回船员白名单字段', async () => {
+  const selected = { uuid: 'crew-node', name: '船员-工程师', parent: 'scene', components: [{ type: 'cid-crew', value: 'crew-view', index: 0 }], children: [] };
+  const state = await recognizeAuthoringSelection({ selectedNode: selected, tree: baseTree(selected), componentClasses: [{ name: 'CrewView', cid: 'cid-crew' }], rooms, crews, scene: { async executeComponentMethod() { return { ok: true, message: '有效', crewInstanceId: 'crew-engineer-1', crewDefinitionId: 'crew-engineer', initialRoomInstanceId: 'room-reactor-1', initialStationIndex: 0, raw: 'secret' }; } } });
+  assert.equal(state.kind, 'crew-instance');
+  assert.equal(state.page, 'crew');
+  assert.equal(state.instanceId, 'crew-engineer-1');
+  assert.equal(state.initialRoomInstanceId, 'room-reactor-1');
+  assert.equal(state.definitionFound, true);
+  assert.equal(state.raw, undefined);
 });
 
 test('AppRoot 识别读取网格和镜头白名单字段', async () => {

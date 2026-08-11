@@ -75,6 +75,7 @@ test('安全配置包认证解密并原子装入房间注册表', async () => {
     maxHp: 120,
     minPower: 1,
     maxPower: 4,
+    powerGeneration: 0,
     crewCapacity: 2,
   });
 });
@@ -142,6 +143,7 @@ test('文档路径穿越、重复路径和文件名与稳定 ID 不一致会被�
     maxHp: 120,
     minPower: 1,
     maxPower: 4,
+    powerGeneration: 0,
     crewCapacity: 2,
   };
   const wrongNamePayload = await openSecureConfigPackage(

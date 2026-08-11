@@ -4,7 +4,7 @@
 
 ## 插件状态
 
-- 历史构建截图中的 Cocos Creator 3.8.8 扩展版本为 v1.1.0；当前源包版本为 v1.2.0。
+- 历史构建截图中的 Cocos Creator 3.8.8 扩展版本为 v1.1.0；当前源包版本已为 v1.3.0。
 - 启用状态：[`M0-007-extension-manager-enabled.jpg`](M0-007-extension-manager-enabled.jpg)。
 - 构建测试时关闭状态：[`M0-007-extension-manager-disabled.jpg`](M0-007-extension-manager-disabled.jpg)。
 - 测试结束后的恢复启用状态：[`M0-007-extension-manager-reenabled.jpg`](M0-007-extension-manager-reenabled.jpg)。

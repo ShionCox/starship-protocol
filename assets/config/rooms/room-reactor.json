@@ -9,5 +9,6 @@
   "maxHp": 100,
   "minPower": 0,
   "maxPower": 0,
-  "crewCapacity": 0
+  "powerGeneration": 10,
+  "crewCapacity": 2
 }

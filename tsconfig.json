@@ -5,7 +5,8 @@
   /* Add your custom configuration here. */
   "compilerOptions": {
     "strict": false,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true
   },
   "exclude": ["extensions", "tests"]
 }

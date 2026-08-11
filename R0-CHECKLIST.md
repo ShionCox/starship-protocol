@@ -56,7 +56,7 @@
 验收项：
 
 - [x] 创建并保存 `PrototypeScene.scene`。
-- [x] 场景包含 MainCamera、Canvas、Background、WorldRoot、ShipRoot、GridRoot、RoomRoot、PreviewRoot、UIRoot 和 AppRoot；这些英文节点名继续作为旧场景兼容路径。
+- [x] 场景包含 MainCamera、Canvas、Background、WorldRoot、ShipRoot、GridRoot、房间容器、PreviewRoot、UIRoot 和 AppRoot；运行时与插件同时兼容旧英文 `RoomRoot`。
 - [x] 场景可正常打开和运行，无阻断错误。
 
 证据：
@@ -64,7 +64,7 @@
 - 场景文件：`assets/scenes/PrototypeScene.scene` 及对应 `.meta` 已由 Cocos 创建。
 - 保存证据：[`docs/evidence/M0-001-build-success-and-scene-saved.png`](docs/evidence/M0-001-build-success-and-scene-saved.png) 显示窗口标题和资源管理器中的 PrototypeScene。
 - 层级证据：[`docs/evidence/M0-003-scene-hierarchy.png`](docs/evidence/M0-003-scene-hierarchy.png) 显示完整展开的目标节点结构，编辑器错误计数为 0。
-- 文件验证：在 `assets/scenes/PrototypeScene.scene` 中检索到全部 10 个目标节点名称。
+- 文件验证：在 `assets/scenes/PrototypeScene.scene` 中检索到 9 个既有英文节点和新补齐的中文语义节点“房间容器”，合计 10 个目标节点。
 - 运行证据：[`docs/evidence/M0-003-M0-005-grid-running-M0-006-input-failed.png`](docs/evidence/M0-003-M0-005-grid-running-M0-006-input-failed.png) 显示 PrototypeScene 已运行、网格已渲染，Console 无游戏阻断错误。
 
 ## [x] M0-004 实现 ShipGridModel
@@ -80,7 +80,7 @@
 - 实现文件：`assets/scripts/game-core/ShipGridModel.ts`。
 - 测试文件：`tests/game-core/ShipGridModel.test.ts`；测试位于 `assets/` 外，避免 Cocos 导入 Node 测试 API。
 - 纯净边界：搜索 `assets/scripts/game-core/` 未发现 `cc` import 或 `cc.` 引用。
-- 单元测试：执行 `npm run test:core`，共 8 项测试，8 项通过、0 项失败。
+- 单元测试：2026-08-11 执行 `npm run test:core`，当前完整套件共 24 项，24 项通过、0 项失败；其中 ShipGridModel 的正常、边界和错误分支均通过。
 - 隔离类型检查：使用 Cocos Creator 3.8.8 内置 TypeScript 5.8.2 对 GameCore 文件执行 `--strict --noEmit`，退出码为 0。
 
 ## [x] M0-005 显示逻辑网格
@@ -106,7 +106,7 @@
 - 二次问题证据：[`docs/evidence/M0-grid-position-after-zero-before-world-refresh.png`](docs/evidence/M0-grid-position-after-zero-before-world-refresh.png) 显示 WorldRoot、ShipRoot、GridRoot 坐标归零后网格仍落在 Canvas 左下方，排除了节点局部坐标错误。
 - 修复前现场文件证据：场景曾保存为 30×10、48 像素，即 1440×480；修复后已恢复为 20×10、48 像素，即 960×480。
 - 修复：`PrototypeSceneSettings` 在编辑态绘制与坐标换算前，从 Canvas 子树重新计算 Cocos 世界矩阵，不改动设计人员保存的节点坐标。
-- 自动验证：Cocos 3.8.8 内置 TypeScript 隔离严格检查通过；GameCore 测试 8/8 通过。
+- 自动验证：Cocos 3.8.8 类型声明下的 TypeScript 检查通过；当前 GameCore/应用核心测试 36/36 通过。
 - 居中预览证据（待保存）：[`docs/evidence/M0-005-grid-centered-before-save.png`](docs/evidence/M0-005-grid-centered-before-save.png) 显示 20×10 网格已在 1280×720 白框内水平、垂直居中；截图标题带 `*`，因此尚不作为持久场景完成证据。
 - 最终持久证据：[`docs/evidence/M0-005-M0-007-editor-grid-room-saved.png`](docs/evidence/M0-005-M0-007-editor-grid-room-saved.png) 的标题不带 `*`，显示保存后的 20×10 居中网格；磁盘场景同时记录 `gridColumns=20`、`gridRows=10`、`cellSize=48` 和 GridRoot `960×480`。
 
@@ -139,7 +139,7 @@
 - [x] 反应堆房间逻辑尺寸为 2×2。
 - [x] 房间使用稳定字符串 ID 和可序列化配置。
 - [x] 表现使用 Prefab/配置实例化，不把 Node 写入 GameCore。
-- [x] ReactorRoom Prefab 实例已放入 RoomRoot，编辑器中可见且可拖动吸附。
+- [x] ReactorRoom Prefab 实例已放入语义 RoomRoot（当前节点名“房间容器”），编辑器中可见且可拖动吸附。
 - [x] RoomView 以中文 Inspector 绑定房间定义并调整外观；逻辑尺寸来自 JSON，吸附开关由场景设置统一提供中文字段。
 - [x] 房间规则迁移为版本化 JSON，并由纯 TypeScript 解析器统一校验。
 - [x] 项目扩展已实现“新建房间建筑”中文表单、重名保护和失败回滚。
@@ -152,24 +152,25 @@
 - 配置：`assets/config/rooms/room-reactor.json` 是稳定 ID `room-reactor` 和 2×2 规则的唯一数据源；`RoomDefinition.ts` 只保留类型与不可信 JSON 解析器。
 - 表现：`assets/scripts/presentation/RoomView.ts`，复用 Cocos Graphics/UITransform 绘制，不自建渲染系统。
 - 实例化：`assets/scripts/bootstrap/PrototypeBootstrap.ts` 已使用 Cocos Prefab + `instantiate()`；场景中存在编辑器实例时优先复用，缺失时才走备用实例化。
-- 测试：执行 `npm run test:core`，房间定义、网格、移动、快照与安全配置包测试合计 24/24 通过。
-- 编辑器插件：`extensions/starship-editor-tools/` 已迁移为 TypeScript `src → dist`；单一宿主只注册房间领域模块，NPC/关卡没有空实现。
-- 插件测试：在扩展目录执行 `npm test`，资源菜单、路径限制、重名拒绝、成功创建、失败回滚、Prefab 自动绑定、自动发现、公开创作面板轮询、分页切换、房间属性保存、语义实例和骨架快照校验共 28/28 通过；另覆盖 Cocos INode `__comps__` 归一化及公开 `set-property` 路径。
+- 测试：2026-08-12 执行根目录 `npm test`，当前 GameCore/Application 55/55、安全 9/9、安全 API 3/3 通过。
+- 编辑器插件：`extensions/starship-editor-tools/` 使用 TypeScript `src → dist`；单一宿主注册房间与当前 R1 船员领域，未实现的普通 NPC/关卡没有空实现。
+- 插件测试：2026-08-12 在扩展目录执行 `npm test`，当前 71/71 通过；覆盖资源事务、自动绑定、自动发现、公开创作面板、房间/船员语义实例、骨架快照、Cocos INode `__comps__` 归一化、公开 `set-property`、R1 能源与船员场景收口、Prefab 关联、能源行局部定位，以及单次原子 Undo。
 - 自动证据：[`docs/evidence/M0-007-editor-tools-verification.md`](docs/evidence/M0-007-editor-tools-verification.md)。
-- 扩展管理器证据：历史截图 [`docs/evidence/M0-007-extension-manager-enabled.jpg`](docs/evidence/M0-007-extension-manager-enabled.jpg) 记录 Creator 识别并启用扩展；当前源包版本为 v1.3.0，禁用回归证据仍见 [`docs/evidence/M0-007-extension-manager-disabled.jpg`](docs/evidence/M0-007-extension-manager-disabled.jpg) 与 [`docs/evidence/M0-007-extension-manager-reenabled.jpg`](docs/evidence/M0-007-extension-manager-reenabled.jpg)。
+- 扩展管理器证据：[`docs/evidence/R1-CREW-extension-manager-v1.5.0.png`](docs/evidence/R1-CREW-extension-manager-v1.5.0.png) 显示 Creator 3.8.8 已识别并启用 `starship-editor-tools v1.5.0`；禁用回归仍见 [`docs/evidence/M0-007-extension-manager-disabled.jpg`](docs/evidence/M0-007-extension-manager-disabled.jpg) 与 [`docs/evidence/M0-007-extension-manager-reenabled.jpg`](docs/evidence/M0-007-extension-manager-reenabled.jpg)。
 - 插件菜单与表单：[`docs/evidence/M0-007-editor-plugin-menu.png`](docs/evidence/M0-007-editor-plugin-menu.png)、[`docs/evidence/M0-007-editor-plugin-form.png`](docs/evidence/M0-007-editor-plugin-form.png)。
 - 创建与不覆盖：[`docs/evidence/M0-007-editor-plugin-create-success.png`](docs/evidence/M0-007-editor-plugin-create-success.png) 显示 AssetDB 已创建 `room-new.json + NewRoom.prefab`；[`docs/evidence/M0-007-editor-plugin-no-overwrite.png`](docs/evidence/M0-007-editor-plugin-no-overwrite.png) 显示重复创建明确拒绝，创建前后两份资源 SHA-256 相同。验收后已删除 4 个临时测试文件，正式资源未改动。
 - 定义绑定：[`docs/evidence/M0-007-editor-prefab-definition-binding.png`](docs/evidence/M0-007-editor-prefab-definition-binding.png) 显示中文“房间定义”绑定 `room-reactor.json`。
 - 重开与双实例：[`docs/evidence/M0-007-editor-cold-reopen-two-rooms.png`](docs/evidence/M0-007-editor-cold-reopen-two-rooms.png) 显示 Creator 冷启动后两个实例仍可见且 Console 为 0；[`docs/evidence/M0-007-two-rooms-runtime.png`](docs/evidence/M0-007-two-rooms-runtime.png) 显示两个房间同时运行。
 - 运行证据：[`docs/evidence/M0-007-reactor-runtime.png`](docs/evidence/M0-007-reactor-runtime.png) 显示橙色 2×2 ReactorRoom 已按配置实例化。
 - 编辑器问题证据：[`docs/evidence/M0-007-editor-preview-missing-before-fix.png`](docs/evidence/M0-007-editor-preview-missing-before-fix.png) 记录原实现只在运行时绘制、编辑器不可见的问题。
-- 编辑器现状证据：[`docs/evidence/M0-editor-room-before-scene-settings.png`](docs/evidence/M0-editor-room-before-scene-settings.png) 显示房间已在编辑器可见且中文字段已生效；[`docs/evidence/M0-editor-hierarchy-before-scene-settings.png`](docs/evidence/M0-editor-hierarchy-before-scene-settings.png) 显示 ReactorRoom 已作为 Prefab 实例放入 RoomRoot。
-- 编辑器可视化修复：RoomView 使用 Cocos `executeInEditMode` 和节点变换事件；吸附与格子尺寸统一读取 AppRoot 的 PrototypeSceneSettings；Bootstrap 优先复用 RoomRoot 中的 Prefab 实例。
+- 编辑器现状证据：[`docs/evidence/M0-editor-room-before-scene-settings.png`](docs/evidence/M0-editor-room-before-scene-settings.png) 显示房间已在编辑器可见且中文字段已生效；[`docs/evidence/M0-editor-hierarchy-before-scene-settings.png`](docs/evidence/M0-editor-hierarchy-before-scene-settings.png) 显示 ReactorRoom 已作为 Prefab 实例放入语义 RoomRoot。
+- 编辑器可视化修复：RoomView 使用 Cocos `executeInEditMode` 和节点变换事件；吸附与格子尺寸统一读取 AppRoot 的 PrototypeSceneSettings；Bootstrap 优先复用语义 RoomRoot（中文或英文别名）中的 Prefab 实例。
 - 拖动吸附证据（待保存）：[`docs/evidence/M0-007-room-snapped-before-save.png`](docs/evidence/M0-007-room-snapped-before-save.png) 显示 2×2 ReactorRoom 已拖入网格并吸附到 `(-288, -96)`；该坐标符合 48 像素网格步长，但截图标题仍带 `*`，暂不作为持久场景完成证据。
-- 保存证据：[`docs/evidence/M0-005-M0-007-editor-grid-room-saved.png`](docs/evidence/M0-005-M0-007-editor-grid-room-saved.png) 标题不带 `*`，显示 RoomRoot 下的 Prefab 实例、中文 RoomView 属性和吸附后的房间；磁盘场景保存位置为 `(-288, -96)`。
-- 插件关闭回归：[`docs/evidence/M0-007-plugin-disabled-build-verification.md`](docs/evidence/M0-007-plugin-disabled-build-verification.md) 记录 Creator 3.8.8 重新构建、正式产物启动、双房间拖放、刷新恢复、镜头缩放/平移及浏览器日志检查；测试完成后插件已恢复启用。
+- 保存证据：[`docs/evidence/M0-005-M0-007-editor-grid-room-saved.png`](docs/evidence/M0-005-M0-007-editor-grid-room-saved.png) 标题不带 `*`，显示语义 RoomRoot 下的 Prefab 实例、中文 RoomView 属性和吸附后的房间；当前磁盘场景的最新复核见本节“当前 HEAD 复核”。
+- 插件关闭回归：[`docs/evidence/M0-007-plugin-disabled-build-verification.md`](docs/evidence/M0-007-plugin-disabled-build-verification.md) 记录历史 Creator 3.8.8 重新构建、正式产物启动、双房间拖放、刷新恢复、镜头缩放/平移及浏览器日志检查；本轮更近期证据见 [`docs/evidence/M0-007A-plugin-disabled-regression.md`](docs/evidence/M0-007A-plugin-disabled-regression.md)。
+- 当前 HEAD 复核：[`docs/evidence/M0-current-head-reverification.md`](docs/evidence/M0-current-head-reverification.md) 记录单反应堆与电梯/激光/护盾四个真实 Prefab 实例、Creator 重新打开场景、正式 Web Desktop 重建及构建产物回归。
 
-## [ ] M0-007A 语义化编辑器创作增强（不计入基础 R0 12 步）
+## [x] M0-007A 语义化编辑器创作增强（不计入基础 R0 12 步）
 
 验收项：
 
@@ -178,16 +179,16 @@
 - [x] 项目/Panel 菜单收敛为打开可停靠“星舰创作工具”，面板调用标准 Prototype 场景骨架补齐逻辑，重名/错误父级时停止并回滚。
 - [x] 面板显示期间轮询公开 Selection，隐藏/关闭时停止；执行创建前重新校验选择和场景。
 - [x] 房间实例创建使用语义 RoomRoot 路由、唯一 ID、GameCore 首个合法空位和失败回滚。
-- [ ] Cocos 可停靠创作面板、标准骨架、房间自动列表、自动绑定 Prefab 和一次 Undo/Redo 截图已取得并保存。
-- [ ] Cocos 新建/补齐标准骨架后，层级管理器实际显示中文节点：主相机、画布、背景层、世界根、飞船根、网格根、房间容器、预览根、界面根和应用根。
-- [ ] 关闭插件后重新打开工程、构建和运行的人工回归截图已补齐本增强项证据。
+- [x] Cocos 可停靠创作面板、标准骨架、房间自动列表、自动绑定 Prefab 和一次 Undo/Redo 截图已取得并保存。
+- [x] Cocos 新建/补齐标准骨架后，层级管理器实际显示中文节点：主相机、画布、背景层、世界根、飞船根、网格根、房间容器、预览根、界面根和应用根；证据为 [`docs/evidence/M0-007A-chinese-standard-skeleton-10-nodes.png`](docs/evidence/M0-007A-chinese-standard-skeleton-10-nodes.png)。
+- [x] 关闭插件后重新打开工程、构建和运行的人工回归截图已补齐本增强项证据。
 
 自动证据：
 
-- 扩展构建与测试：在 `extensions/starship-editor-tools/` 执行 `npm test`，28/28 通过；覆盖资源事务、自动绑定、Prefab 发现、缺失 RoomView 时 fail closed、公开 Selection 场景状态、可见期间轮询与隐藏清理、分页切换、房间属性编辑、公开 Asset DB `save-asset`、语义父节点、唯一实例 ID、首个合法空位、回滚、骨架和单次快照；骨架还覆盖了 Creator 压缩组件 `cid`、`components[].value`/`__comps__` UUID 查询映射和公开 `set-property` 引用 dump。
-- 核心回归：根目录执行 `npm test`，GameCore/安全/安全 API 套件全部通过（24 + 9 + 3 项）。
-- 持久说明：[`docs/evidence/M0-007A-dockable-authoring-panel-implementation.md`](docs/evidence/M0-007A-dockable-authoring-panel-implementation.md)；人工 Cocos 面板和截图项目明确标记“未验证”，因此本节新增人工项保持未勾选。
-- UI 实现：面板源码已统一中文文案，采用左侧分页、分类筛选、资源列表和右侧直接编辑检查器；场景状态、房间建筑、操作反馈拆成卡片/徽标/分级提示，并支持内容区滚动；设备/NPC 页面仅显示真实里程碑状态，不伪造未实现数据。视觉截图仍待 Cocos 重载后补齐，未提前勾选人工项。
+- 扩展构建与测试：2026-08-12 在 `extensions/starship-editor-tools/` 执行 `npm test`，71/71 通过；覆盖房间与船员资源事务、自动绑定、Prefab 发现、CID/类名识别、公开 Selection、可见期间轮询与隐藏清理、四页切换、中文属性编辑、语义父节点、唯一实例 ID、首个合法空位、R1 能源/船员场景收口、PowerRoomRow 局部定位、回滚、骨架和单次原子 Undo。
+- 核心回归：根目录执行 `npm test`，GameCore/Application、安全、安全 API 套件全部通过（55 + 9 + 3 项）。
+- 持久说明：[`docs/evidence/M0-007A-dockable-authoring-panel-implementation.md`](docs/evidence/M0-007A-dockable-authoring-panel-implementation.md)；10 节点中文骨架见 [`docs/evidence/M0-007A-chinese-standard-skeleton-10-nodes.png`](docs/evidence/M0-007A-chinese-standard-skeleton-10-nodes.png)；420px 窄面板见 [`docs/evidence/M0-007A-authoring-panel-420-css-px.png`](docs/evidence/M0-007A-authoring-panel-420-css-px.png)。
+- UI 实现：面板源码统一中文文案，当前采用“场景 / 房间建筑 / 船员 / 校验”四页、分类筛选、资源列表和右侧直接编辑检查器；场景状态、领域内容和操作反馈拆成卡片/徽标/分级提示，并支持内容区滚动和约 420px 单列布局。
 - 语义命名：创作面板新建骨架时实际写入中文 Node 名（“画布/世界根/飞船根/房间容器”等），运行时和插件通过语义别名兼容 `Canvas/WorldRoot/ShipRoot/RoomRoot` 等旧英文场景；已有英文场景不自动改名。
 
 ## [x] M0-008 实现 PlacementValidator
@@ -204,7 +205,7 @@
 
 - 实现：`assets/scripts/game-core/ShipGridModel.ts` 中的 `validateRoomPlacement`，与占用写入共用同一校验入口。
 - 覆盖分支：非整数、非正尺寸、越界、无效船体格、重叠、重复 ID、合法放置和移除。
-- 测试结果：`npm run test:core` 当前完整套件通过 24/24，退出码为 0。
+- 测试结果：`npm run test:core` 当前完整套件通过 36/36，退出码为 0。
 
 ## [x] M0-009 实现拖放和预览
 
@@ -230,7 +231,7 @@
 - 合法预览：[`docs/evidence/M0-009-valid-green-preview.png`](docs/evidence/M0-009-valid-green-preview.png) 显示拖动过程中的绿色边框；松开后房间吸附到合法格。
 - 重叠预览与回滚：[`docs/evidence/M0-009-overlap-red-preview.png`](docs/evidence/M0-009-overlap-red-preview.png) 显示两个房间重叠时红色边框；[`docs/evidence/M0-009-overlap-release-rollback.png`](docs/evidence/M0-009-overlap-release-rollback.png) 显示松开后回到原合法格。
 - 双房间快速释放：[`docs/evidence/M0-009-two-room-fast-drag-released.png`](docs/evidence/M0-009-two-room-fast-drag-released.png) 显示快速拖动并把鼠标移远后，房间保持吸附且边框恢复黄色，不再粘着。
-- 自动验证：[`docs/evidence/M0-009-implementation-verification.md`](docs/evidence/M0-009-implementation-verification.md) 保留拖放实现证据；当前完整 GameCore 套件为 24/24 通过。
+- 自动验证：[`docs/evidence/M0-009-implementation-verification.md`](docs/evidence/M0-009-implementation-verification.md) 保留拖放实现证据；当前完整 GameCore 套件为 36/36 通过。
 
 ## [x] M0-010 保存 JSON
 
@@ -246,7 +247,7 @@
 - 快照实现：`assets/scripts/game-core/ShipGridModel.ts` 中的 `createShipLayoutSnapshot()`、`serializeShipLayout()` 和 `restoreShipLayout()`；GameCore 不引用 DOM、Cocos 或 localStorage。
 - Web 适配：`assets/scripts/bootstrap/PrototypeLayoutStorage.ts` 使用浏览器原生 localStorage，读写和隐私模式访问异常均转换为可观察结果。
 - 场景接线：`PrototypeBootstrap` 只在 `moveRoom()` 成功后保存；保存失败使用 Cocos `error()` 输出 `[SAVE]` 错误。
-- 自动验证：[`docs/evidence/M0-010-M0-011-persistence-verification.md`](docs/evidence/M0-010-M0-011-persistence-verification.md) 保留持久化验证；当前完整 GameCore 套件为 24/24 通过。
+- 自动验证：[`docs/evidence/M0-010-M0-011-persistence-verification.md`](docs/evidence/M0-010-M0-011-persistence-verification.md) 保留持久化验证；当前完整 GameCore 套件为 36/36 通过。
 - Web 端到端证据：[`docs/evidence/M0-010-browser-valid-drop-saved.png`](docs/evidence/M0-010-browser-valid-drop-saved.png) 记录成功放置后的布局；随后刷新捕获到 `[SAVE] 已从 localStorage 恢复 R0 飞船布局`，证明真实 localStorage 保存/读取链路已执行。
 - 数据边界证据：存储键为 `starship-protocol:r0:ship-layout`；JSON 只包含 `schemaVersion`、逻辑网格尺寸与稳定房间 ID/整数逻辑坐标/逻辑尺寸，源码与往返测试均未包含 Cocos Node、Prefab 或世界坐标。
 
@@ -277,4 +278,4 @@
 - [x] 浏览器 Console 无阻断级错误。
 - [x] 对照 R0 验收清单逐项复核通过；M0-007 的插件启用与禁用回归也已取得独立证据。
 
-证据：[`docs/evidence/M0-012-web-desktop-final-verification.md`](docs/evidence/M0-012-web-desktop-final-verification.md)。
+证据：[`docs/evidence/M0-012-web-desktop-final-verification.md`](docs/evidence/M0-012-web-desktop-final-verification.md)；当前 HEAD 的重新构建与浏览器回归见 [`docs/evidence/M0-current-head-reverification.md`](docs/evidence/M0-current-head-reverification.md)。

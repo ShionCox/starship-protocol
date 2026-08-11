@@ -18,6 +18,7 @@ const VALID_REACTOR: RoomDefinitionDocument = {
   maxHp: 100,
   minPower: 0,
   maxPower: 0,
+  powerGeneration: 10,
   crewCapacity: 0,
 };
 
@@ -35,9 +36,16 @@ test('解析合法的版本化房间定义', () => {
       maxHp: 100,
       minPower: 0,
       maxPower: 0,
+      powerGeneration: 10,
       crewCapacity: 0,
     });
   }
+});
+
+test('旧配置缺失能源产能时按 0 兼容', () => {
+  const result = parseRoomDefinition({ ...VALID_REACTOR, powerGeneration: undefined });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.definition.powerGeneration, 0);
 });
 
 test('拒绝非对象和不支持的 schemaVersion', () => {
@@ -61,6 +69,11 @@ test('拒绝未知房间分类', () => {
   assert.deepEqual(result.ok ? null : result.code, 'INVALID_CATEGORY');
 });
 
+test('拒绝非能源房间声明正产能', () => {
+  const result = parseRoomDefinition({ ...VALID_REACTOR, category: 'WEAPON', powerGeneration: 1 });
+  assert.deepEqual(result.ok ? null : result.code, 'INVALID_NUMBER_RANGE');
+});
+
 test('拒绝非正整数网格尺寸', () => {
   for (const width of [0, -1, 1.5, '2']) {
     const result = parseRoomDefinition({ ...VALID_REACTOR, width });
@@ -74,6 +87,8 @@ test('拒绝非法等级、耐久、能源和船员容量', () => {
     { maxHp: -1 },
     { minPower: -1 },
     { minPower: 2, maxPower: 1 },
+    { powerGeneration: -1 },
+    { powerGeneration: 1.5 },
     { crewCapacity: 1.5 },
   ];
   for (const invalid of invalidValues) {

@@ -17,6 +17,7 @@ export interface RoomDefinitionEditRequest {
   readonly maxHp: number;
   readonly minPower: number;
   readonly maxPower: number;
+  readonly powerGeneration?: number;
   readonly crewCapacity: number;
 }
 
@@ -60,6 +61,7 @@ export async function updateRoomDefinition(
     maxHp: request.maxHp,
     minPower: request.minPower,
     maxPower: request.maxPower,
+    powerGeneration: request.powerGeneration ?? current.powerGeneration,
     crewCapacity: request.crewCapacity,
   });
   if (parsed === null) return { ok: false, message: '房间属性不合法，请检查名称、分类、尺寸和数值范围' };
@@ -75,6 +77,7 @@ export async function updateRoomDefinition(
     maxHp: parsed.maxHp,
     minPower: parsed.minPower,
     maxPower: parsed.maxPower,
+    powerGeneration: parsed.powerGeneration,
     crewCapacity: parsed.crewCapacity,
   } satisfies RoomDefinitionDocument;
 

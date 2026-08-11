@@ -10,27 +10,28 @@ const template = `
 <form id="form">
   <h2>新建房间建筑</h2>
   <div class="grid">
-    <label>稳定房间 ID<input id="id" value="room-new" required></label>
+    <label>稳定房间标识<input id="id" value="room-new" required></label>
     <label>中文名称<input id="displayName" value="新房间" required></label>
     <label>房间分类<select id="category">
-      <option>ENERGY</option><option>WEAPON</option><option>DEFENSE</option>
-      <option>MOBILITY</option><option>SUPPORT</option><option>MOVEMENT</option>
-      <option>TACTICAL</option><option>DRONE</option><option>ECONOMY</option><option>SPECIAL</option>
+      <option value="ENERGY">能源</option><option value="WEAPON">武器</option><option value="DEFENSE">防御</option>
+      <option value="MOBILITY">机动</option><option value="SUPPORT">支援</option><option value="MOVEMENT">移动</option>
+      <option value="TACTICAL">战术</option><option value="DRONE">无人机</option><option value="ECONOMY">经济</option><option value="SPECIAL">特殊</option>
     </select></label>
-    <label>Prefab 名称<input id="prefabName" value="NewRoom" required></label>
+    <label>预制体名称<input id="prefabName" value="NewRoom" required></label>
     <label>宽度（格）<input id="width" type="number" min="1" step="1" value="2" required></label>
     <label>高度（格）<input id="height" type="number" min="1" step="1" value="2" required></label>
     <label>最高等级<input id="maxLevel" type="number" min="1" step="1" value="1" required></label>
     <label>最大耐久<input id="maxHp" type="number" min="1" step="1" value="100" required></label>
     <label>最低能源<input id="minPower" type="number" min="0" step="1" value="0" required></label>
     <label>最高能源<input id="maxPower" type="number" min="0" step="1" value="0" required></label>
+    <label>能源产能<input id="powerGeneration" type="number" min="0" step="1" value="0" required></label>
     <label>船员容量<input id="crewCapacity" type="number" min="0" step="1" value="0" required></label>
   </div>
-  <label>模板 Prefab URL<input id="templateUrl" required></label>
-  <label>目标 Prefab 目录<input id="targetDirectory" required></label>
+  <label>模板预制体路径<input id="templateUrl" required></label>
+  <label>目标预制体目录<input id="targetDirectory" required></label>
   <div class="actions">
     <ui-button id="submit" class="blue">创建资源</ui-button>
-    <ui-button id="openPrefab" hidden>打开新 Prefab</ui-button>
+    <ui-button id="openPrefab" hidden>打开新预制体</ui-button>
     <ui-button id="validatePrefab">校验当前 Prefab</ui-button>
   </div>
   <pre id="status" aria-live="polite"></pre>
@@ -68,6 +69,7 @@ module.exports = Editor.Panel.define({
     maxHp: '#maxHp',
     minPower: '#minPower',
     maxPower: '#maxPower',
+    powerGeneration: '#powerGeneration',
     crewCapacity: '#crewCapacity',
     templateUrl: '#templateUrl',
     targetDirectory: '#targetDirectory',
@@ -96,6 +98,7 @@ module.exports = Editor.Panel.define({
         maxHp: Number(getInput('maxHp').value),
         minPower: Number(getInput('minPower').value),
         maxPower: Number(getInput('maxPower').value),
+        powerGeneration: Number(getInput('powerGeneration').value),
         crewCapacity: Number(getInput('crewCapacity').value),
         templateUrl: getInput('templateUrl').value.trim(),
         targetDirectory: getInput('targetDirectory').value.trim(),
@@ -131,7 +134,7 @@ module.exports = Editor.Panel.define({
 
     validatePrefab.addEventListener('confirm', async () => {
       status.className = '';
-      status.textContent = '正在校验当前 Prefab…';
+      status.textContent = '正在校验当前预制体…';
       try {
         const result = await Editor.Message.request(
           PACKAGE_NAME,

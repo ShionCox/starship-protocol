@@ -16,6 +16,7 @@ function validRequest(overrides = {}) {
     maxHp: 100,
     minPower: 0,
     maxPower: 2,
+    powerGeneration: 0,
     crewCapacity: 2,
     prefabName: 'LaserRoom',
     templateUrl: 'db://assets/prefabs/ReactorRoom.prefab',
@@ -77,8 +78,19 @@ test('合法请求创建 JSON 后复制 Prefab，且 JSON 使用版本化规则�
     maxHp: 100,
     minPower: 0,
     maxPower: 2,
+    powerGeneration: 0,
     crewCapacity: 2,
   });
+});
+
+test('新建表单把分类显示为中文但继续提交稳定英文值', () => {
+  let panelDefinition;
+  global.Editor = { Panel: { define(value) { panelDefinition = value; return value; } } };
+  delete require.cache[require.resolve('../dist/panels/room-create.js')];
+  require('../dist/panels/room-create.js');
+  assert.match(panelDefinition.template, /<option value="ENERGY">能源<\/option>/);
+  assert.match(panelDefinition.template, /<option value="WEAPON">武器<\/option>/);
+  delete global.Editor;
 });
 
 test('非法路径和名称在任何 Asset DB 写入前失败', async () => {
@@ -87,6 +99,19 @@ test('非法路径和名称在任何 Asset DB 写入前失败', async () => {
     validRequest({ prefabName: '../LaserRoom' }),
     validRequest({ targetDirectory: 'db://assets/scenes' }),
     validRequest({ templateUrl: 'db://assets/scenes/Test.prefab' }),
+  ]) {
+    const db = fakeAssetDb();
+    const result = await createRoomContent(request, db);
+    assert.equal(result.ok, false);
+    assert.equal(db.calls.length, 0);
+  }
+});
+
+test('能源产能必须是非负整数，非能源房间不能发电', async () => {
+  for (const request of [
+    validRequest({ powerGeneration: -1 }),
+    validRequest({ powerGeneration: 1.5 }),
+    validRequest({ category: 'WEAPON', powerGeneration: 1 }),
   ]) {
     const db = fakeAssetDb();
     const result = await createRoomContent(request, db);

@@ -81,7 +81,7 @@ Prefab + 配置数据 + instantiate
 创作工具可识别类型的稳定 ID、识别器顺序、白名单 DTO、字段读写边界和接入检查表统一见 [`19-Cocos创作工具类型接入规范.md`](./19-Cocos创作工具类型接入规范.md)。本节只保留资源与 Prefab 的边界规则。
 
 - 全项目只保留 `extensions/starship-editor-tools/` 一个创作工具宿主；房间、NPC、关卡按领域模块注册，不各建一套扩展生命周期。
-- 本轮房间模块从资源管理器“新建 → 星舰协议 → 新建房间建筑”打开中文表单；场景结构、校验和实例创建统一从“项目/Panel → 星舰协议 → 打开星舰创作工具”的可停靠面板完成。
+- 房间模块从资源管理器“新建 → 星舰协议 → 新建房间建筑”打开中文表单；场景结构、校验和实例创建统一从 Project / Panel 直接菜单打开同一个可停靠“星舰创作工具”面板。
 - 表单创建 `assets/config/rooms/<room-id>.json` 和目标目录中的 Prefab 副本；创建前必须校验 ID、数值、路径和重名，禁止覆盖。
 - 多资源创建必须有回滚：后续步骤失败时删除本次已经创建的资产，回滚失败也必须给出明确错误和残留路径。
 - 插件通过 Asset DB `create-asset`、`copy-asset`、`delete-asset`、`open-asset` 等公开消息操作资源，不直接写 `.prefab` / `.meta` 序列化文本。
@@ -95,7 +95,10 @@ Prefab + 配置数据 + instantiate
 - 创作面板采用左侧领域分页、分类筛选、资源列表和右侧中文属性检查器；已接入领域的规则字段必须支持直接编辑并通过公开 Asset DB `save-asset` 保存。稳定 ID、Prefab 引用和资源路径保持只读，保存前重新读取并校验 JSON，避免面板缓存覆盖外部修改。
 - 面板选择联动只在 UUID 变化时自动切页；实例字段只读，定义字段通过白名单表单编辑。新增 NPC、关卡等类型必须先按 [`19-Cocos创作工具类型接入规范.md`](./19-Cocos创作工具类型接入规范.md) 显式注册，不得自动暴露全部组件字段。
 - Prefab 保存颜色、组件、锚点与资源引用；JSON 保存版本、稳定 ID、分类、逻辑尺寸和规则数值，禁止写 Node 或世界坐标。
-- NPC 和关卡只有在对应里程碑开始后才增加领域模块。本轮不创建不可用菜单或万能实体配置。
+- R1 船员里程碑在同一插件内增加“船员”分页：扫描 `assets/config/crews/*.json` 与 Crew Prefab 的真实依赖，支持中文表单创建、定义编辑、Prefab 绑定、场景实例化、Selection 识别、单次 Undo 和失败回滚；不创建第二个插件。
+- `CrewMember.prefab` 是船员模板，`EngineerCrew.prefab` 与 `GunnerCrew.prefab` 保存各自 JSON 引用、默认实例 ID 和职业外观。`CrewView` 的实例 ID、初始房间、初始站位、主体颜色、边框颜色、选中描边和标记直径全部使用中文 Inspector。
+- `PowerRoomRow.prefab` 是能源面板两条重复控制行的唯一模板；插件用公开 Scene API 建立两个关联实例，并在组件方法内设置面板局部坐标，禁止把 `create-node.position` 的场景坐标误当局部坐标。
+- 未进入里程碑的普通 NPC 和关卡仍不得添加空菜单、占位 Prefab 或万能实体配置。
 
 ### 领域创作入口映射
 
@@ -104,10 +107,11 @@ Prefab + 配置数据 + instantiate
 | 房间/建筑 | `assets/config/rooms/*.json` | 房间 Prefab | 资源管理器表单 + Inspector | 创作面板创建已发现实例 |
 | 场景结构 | Scene 层级 | Scene/Prefab | 场景编辑器或创作面板初始化骨架 | 创作面板补齐标准骨架 |
 | 船体/关卡地图 | 版本化关卡 JSON | Scene 可视化布局 | Scene + 校验/导出面板 | 仅加入已经实现的语义对象 |
-| NPC/船员 | 定义资产 | NPC Prefab | 对应里程碑的定义表单 | 有可用实现后再加入 |
+| 船员 | `assets/config/crews/*.json` | Crew Prefab | 创作面板“船员”分页 + 资源管理器菜单 | 发现、编辑并创建 CrewView 实例 |
+| 其他 NPC | 定义资产 | NPC Prefab | 对应里程碑的定义表单 | 有可用实现后再加入 |
 | 槽位装备、技能、奖励、AI 条件 | JSON/专用面板 | 绑定点或 UI | Inspector/专用面板 | 不创建空节点 |
 
-NPC、关卡和其他领域在进入对应里程碑前不得添加空菜单、占位 Prefab 或万能实体编辑器。
+其他 NPC、关卡和其他领域在进入对应里程碑前不得添加空菜单、占位 Prefab 或万能实体编辑器。
 
 未来关卡仍以 Scene 作为可视化创作输入；插件导出 `schemaVersion`、`levelId`、`hullId`、定义 ID、实例 ID 和整数格坐标的逻辑布局 JSON，运行时不直接把 Scene 节点当作规则状态。
 

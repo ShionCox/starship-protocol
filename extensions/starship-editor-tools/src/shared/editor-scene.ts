@@ -23,6 +23,12 @@ export interface SceneReferenceValue {
   readonly uuid: string;
 }
 
+/** Cocos 公开 set-property 所需的有类型属性 dump，例如 cc.Color。 */
+export interface SceneTypedValue {
+  readonly type: string;
+  readonly value: unknown;
+}
+
 export interface SceneComponentClassInfo {
   readonly name?: string;
   readonly cid?: string;
@@ -59,10 +65,15 @@ export interface SceneQueryPort {
     readonly parent: string;
     readonly name: string;
     readonly assetUuid?: string;
+    /** Creator 从资源创建节点时使用的公开资源类型。 */
+    readonly type?: string;
     readonly position?: { readonly x: number; readonly y: number; readonly z: number };
-    /** 是否由 Creator 为本次节点创建立即生成快照；批量操作由调用方统一 snapshot。 */
+    /** 明确保留 Prefab 关联；房间实例不得退化为复制出来的普通节点。 */
+    readonly unlinkPrefab?: boolean;
+    /** 是否由 Creator 为本次节点创建立即生成快照；批量操作由调用方统一录制或快照。 */
     readonly snapshot?: boolean;
   }): Promise<SceneNodeCreation | null>;
+  queryNodesByAssetUuid(assetUuid: string): Promise<readonly string[]>;
   createComponent(nodeUuid: string, component: string): Promise<void>;
   removeNode(nodeUuid: string): Promise<void>;
   setProperty(
@@ -75,6 +86,12 @@ export interface SceneQueryPort {
   /** Cocos 公开组件注册表，用于把压缩 cid 还原为稳定类名。 */
   queryComponents?(): Promise<readonly SceneComponentClassInfo[]>;
   executeComponentMethod(componentUuid: string, name: string, args: readonly unknown[]): Promise<unknown>;
+  /** 在已有父节点上开始一次公开 Scene 原子记录，新建子节点也会进入同一 Undo。 */
+  beginRecording(nodeUuid: string): Promise<string>;
+  /** 提交 beginRecording 创建的单次 Undo 记录。 */
+  endRecording(undoId: string): Promise<void>;
+  /** 失败时取消 beginRecording 创建的 Undo 记录。 */
+  cancelRecording(undoId: string): Promise<void>;
   /** 将一次面板操作收敛为一个公开 Scene 快照，供 Undo/Redo 使用。 */
   snapshot(): Promise<void>;
   /** 失败时丢弃当前公开 Scene 快照。 */
@@ -98,12 +115,17 @@ export const editorSceneQuery: SceneQueryPort = {
       parent: options.parent,
       name: options.name,
       assetUuid: options.assetUuid,
+      type: options.type,
       position: options.position,
+      unlinkPrefab: options.unlinkPrefab ?? false,
       nameIncrease: true,
       snapshot: options.snapshot ?? false,
     });
     if (typeof result === 'string') return { uuid: result };
     return result as SceneNodeCreation | null;
+  },
+  async queryNodesByAssetUuid(assetUuid) {
+    return await Editor.Message.request('scene', 'query-nodes-by-asset-uuid', assetUuid) as readonly string[];
   },
   async createComponent(nodeUuid, component) {
     await Editor.Message.request('scene', 'create-component', {
@@ -120,12 +142,12 @@ export const editorSceneQuery: SceneQueryPort = {
     const propertyPath = targetInfo === undefined ? path : `__comps__.${targetInfo.index}.${path}`;
     const dump = isSceneReferenceValue(value)
       ? { type: value.type, value: { uuid: value.uuid } }
-      : { value };
+      : isSceneTypedValue(value) ? value : { value };
     return await Editor.Message.request('scene', 'set-property', {
       uuid,
       path: propertyPath,
       dump: dump as never,
-      // 正常写入必须进入 Creator Undo 记录；失败回滚由调用方传 record:false。
+      // 普通写入进入 Creator Undo；显式 begin-recording 内由调用方传 record:false，避免拆成多条记录。
       record: options.record ?? true,
     }) as boolean;
   },
@@ -141,6 +163,15 @@ export const editorSceneQuery: SceneQueryPort = {
       name,
       args,
     });
+  },
+  async beginRecording(nodeUuid) {
+    return await Editor.Message.request('scene', 'begin-recording', nodeUuid) as string;
+  },
+  async endRecording(undoId) {
+    await Editor.Message.request('scene', 'end-recording', undoId);
+  },
+  async cancelRecording(undoId) {
+    await Editor.Message.request('scene', 'cancel-recording', undoId);
   },
   async snapshot() {
     await Editor.Message.request('scene', 'snapshot');
@@ -186,6 +217,12 @@ function isSceneReferenceValue(value: unknown): value is SceneReferenceValue {
   return typeof value === 'object' && value !== null
     && typeof (value as { type?: unknown }).type === 'string'
     && typeof (value as { uuid?: unknown }).uuid === 'string';
+}
+
+function isSceneTypedValue(value: unknown): value is SceneTypedValue {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { type?: unknown }).type === 'string'
+    && 'value' in value;
 }
 
 /**

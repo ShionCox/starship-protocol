@@ -112,6 +112,7 @@ interface RoomDefinition {
   maxHp: number;
   minPower: number;
   maxPower: number;
+  powerGeneration?: number; // 能源房间的基础产能；旧配置缺省为 0
   crewCapacity: number;
 }
 ```
@@ -165,6 +166,8 @@ R1 可先本地即时升级，R2 服务端权威。
 可用能源 = 所有有效能源房间产出 - 状态惩罚
 ```
 
+R1 纵切使用 `powerGeneration` 表示能源房间实例的基础产能；未提供该字段的旧房间定义按 0 处理。`minPower` / `maxPower` 仍表示该房间可接受的当前分配范围，动态分配不写入 R0 的布局快照。
+
 每个耗能房间具有：当前分配能源、最低运行能源、最大能源、不同能源档位效果。
 
 ## FR-POWER-001 手动分配
@@ -174,6 +177,12 @@ R1 可先本地即时升级，R2 服务端权威。
 ## FR-POWER-002 能源不足
 
 当总分配大于可用能源时，Command 必须失败，UI 提示原因，不允许进入非法状态。P0。
+
+R1 当前通过纯 TypeScript `EnergyModel` 执行 `SET_ROOM_POWER` / `RESET_ROOM_POWER`，失败保持旧状态；状态快照只保存稳定房间 ID 与当前分配，产能由有效房间定义重新计算。
+
+R1 运行时把场景中每个 `RoomView.roomInstanceId` 与已解析的 `RoomDefinition` 组成只读映射，再由 `createEnergyRooms` 生成 `EnergyRoom`；映射不读取 Node、Prefab 或像素坐标，任一实例 ID、定义或非能源产能非法时整次能源装配失败。能源快照独立保存于 Web `localStorage` 的 `starship-protocol:r1:energy`，不改变 R0 布局存档；版本不兼容、未知房间、重复分配或非法数值会整份回退为零并输出警告。
+
+玩家界面只消费 `PowerPanelState`，按钮动作转换为 `EnergyCommand` 交给 Bootstrap 的 Handler；EnergyModel 成功后立即保存，保存失败恢复 Command 前快照，面板继续显示旧状态。当前纵切只提供基础产能和手动分配，不实现状态惩罚、Tick、武器开火、护盾效果或 AI 调电。
 
 ## FR-POWER-003 房间断电
 
@@ -210,6 +219,8 @@ Ability
 
 ## 13.2 船员运行状态
 
+R1 船员移动纵切只启用 `IDLE` 和 `MOVING`；其余状态是后续维修、岗位、战斗和医疗里程碑的扩展目标，当前不得提前写入运行时快照。
+
 ```ts
 type CrewState =
   | 'IDLE'
@@ -230,6 +241,17 @@ type CrewState =
 ## FR-CREW-002 房间岗位
 
 房间拥有站位数量，超过容量时按统一规则排队或拒绝 Command。P0。
+
+R1 当前选择“拒绝 Command”：`CrewModel` 在移动前预留目标房间最低编号空闲站位，移动中的船员继续占用目标预留站位；目标已满、船员忙碌、房间未知或路径不存在时整条 `MOVE_CREW` 失败且旧状态不变。路径经过的中间房间不占用岗位。
+
+## 13.3 R1 船员移动纵切
+
+- `CrewDefinition` 使用 `schemaVersion = 1`，当前职业只有 `ENGINEER` / `GUNNER`，中文显示分别为“工程师”和“武器操作员”；定义只保存稳定 ID、中文名称、最大生命和每条导航边的固定 Tick 数。
+- `CrewModel` 只消费 `NavigationGraph`、初始站位和 `MOVE_CREW`；`advanceOneTick()` 是唯一移动时钟入口，快照按稳定船员实例 ID 排序，并保存当前房间、目标房间、站位、完整活动路径和边内 Tick 进度。
+- Web 原型船员快照独立保存到 `starship-protocol:r1:crew`，不写入布局或能源快照。空存档使用编辑器初始站位；新增船员补默认状态；未知旧船员、未知房间、重复实例、容量冲突、断开路径或版本错误会整份回退。
+- Command 接受、跨越导航边和最终到达均保存；写盘失败恢复前一份持久快照，跨边失败同时暂停时钟并显示中文错误。
+- Cocos `CrewView` 只负责中文 Inspector、选择、高亮和只读插值；`CrewStatusPanel` 只展示选择、当前房间、目标房间、状态与中文提示。Bootstrap 以 10Hz 调用核心 Tick，不在渲染 `update()` 中执行船员规则。
+- 当前边界只包含两名可见船员和单层房间移动，不实现岗位加成、维修、伤害、死亡、排队、跨甲板电梯、AI 或 Replay。
 
 ## FR-CREW-003 房间加成
 

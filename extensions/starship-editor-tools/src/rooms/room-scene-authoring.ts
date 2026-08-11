@@ -137,7 +137,7 @@ export function nextRoomInstanceId(
   return `${definitionId}-${index}`;
 }
 
-/** 面板创建房间实例的原子操作：失败不留下节点，成功只生成一个 Undo 快照。 */
+/** 面板创建房间实例的原子操作：失败不留下节点，成功只生成一条 Undo 记录。 */
 export async function createRoomInstance(
   scene: SceneQueryPort,
   context: SceneSelectionContext,
@@ -166,15 +166,24 @@ export async function createRoomInstance(
   }
   const existingIds = await collectRoomInstanceIds(scene, tree, componentClasses);
   let createdUuid: string | undefined;
+  let undoId: string | undefined;
   try {
+    undoId = await scene.beginRecording(placementTarget.node.uuid);
     const created = await scene.createNode({
       parent: placementTarget.node.uuid,
       name: `房间-${entry.displayName}`,
       assetUuid: entry.prefabUuid,
+      type: 'cc.Prefab',
       position: { x: 0, y: 0, z: 0 },
+      unlinkPrefab: false,
     });
     createdUuid = created?.uuid;
     if (createdUuid === undefined) throw new Error(`创建房间 Prefab 失败：${entry.prefabUrl}`);
+
+    const linkedNodes = await scene.queryNodesByAssetUuid(entry.prefabUuid);
+    if (!linkedNodes.includes(createdUuid)) {
+      throw new Error(`创建结果未保留 Prefab 关联：${entry.prefabUrl}`);
+    }
 
     const createdTree = await scene.queryNodeTree();
     const createdNode = findNode(createdTree, createdUuid);
@@ -185,7 +194,7 @@ export async function createRoomInstance(
     const instanceId = nextRoomInstanceId(createdTree, entry.id, existingIds);
     const roomViewTarget = getSceneComponentTarget(roomViewComponent);
     if (roomViewTarget === undefined) throw new Error('生成的 Prefab 缺少可编辑的 RoomView 组件定位');
-    if (!(await scene.setProperty(roomViewTarget, 'roomInstanceId', instanceId))) {
+    if (!(await scene.setProperty(roomViewTarget, 'roomInstanceId', instanceId, { record: false }))) {
       throw new Error('无法写入房间实例 ID');
     }
     if (placementTarget.mode === 'grid') {
@@ -197,15 +206,18 @@ export async function createRoomInstance(
       if (applied !== true) throw new Error('无法把房间吸附到合法逻辑格');
     }
 
-    await scene.snapshot();
+    await scene.endRecording(undoId);
+    undoId = undefined;
     selectNode(createdUuid);
-    await focusNode(createdUuid);
+    // 聚焦只是编辑器体验增强；Undo 已提交后，聚焦失败不能反向删除已成功创建的房间。
+    await focusNode(createdUuid).catch(() => undefined);
     const placementMessage = placementTarget.mode === 'grid'
       ? '已按逻辑网格放置'
       : placementTarget.mode === 'canvas' ? '已放到 Canvas 顶层' : '已放到场景顶层';
     return { ok: true, message: `已创建 ${entry.displayName}，${placementMessage}，实例 ID：${instanceId}`, nodeUuid: createdUuid };
   } catch (error) {
     if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
+    if (undoId !== undefined) await scene.cancelRecording(undoId).catch(() => undefined);
     await scene.snapshotAbort().catch(() => undefined);
     return { ok: false, message: `${toMessage(error)}；已回滚临时房间节点` };
   }

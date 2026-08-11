@@ -36,14 +36,14 @@ export class PrototypeSceneSettings extends Component {
   @property({
     type: Node,
     displayName: '网格根节点',
-    tooltip: '用于绘制飞船网格的 GridRoot 节点。',
+    tooltip: '用于绘制飞船网格的网格根节点。',
     group: '节点引用',
   })
   public gridRoot: Node | null = null;
 
   @property({
     displayName: '网格列数',
-    tooltip: '飞船逻辑网格的横向格子数量，同时用于创建 GameCore 网格。',
+    tooltip: '飞船逻辑网格的横向格子数量，同时用于创建游戏核心网格。',
     group: '网格参数',
     min: 1,
     step: 1,
@@ -52,7 +52,7 @@ export class PrototypeSceneSettings extends Component {
 
   @property({
     displayName: '网格行数',
-    tooltip: '飞船逻辑网格的纵向格子数量，同时用于创建 GameCore 网格。',
+    tooltip: '飞船逻辑网格的纵向格子数量，同时用于创建游戏核心网格。',
     group: '网格参数',
     min: 1,
     step: 1,

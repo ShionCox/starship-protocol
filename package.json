@@ -3,7 +3,7 @@
   "uuid": "d826ab96-1150-44fa-a59f-b6132e52a668",
   "type": "module",
   "scripts": {
-    "test:core": "node --experimental-strip-types --test tests/game-core/RoomDefinition.test.ts tests/game-core/ShipGridModel.test.ts tests/game-core/ShipLayoutSnapshot.test.ts tests/application/SecureConfigPackage.test.ts tests/application/SecureConfigBootstrap.test.ts",
+    "test:core": "node --experimental-strip-types --test tests/game-core/RoomDefinition.test.ts tests/game-core/ShipGridModel.test.ts tests/game-core/ShipLayoutSnapshot.test.ts tests/game-core/EnergyModel.test.ts tests/game-core/CrewDefinition.test.ts tests/game-core/NavigationGraph.test.ts tests/game-core/CrewModel.test.ts tests/game-core/bootstrap/PrototypeLayoutPlanner.test.ts tests/application/PrototypeEnergyStorage.test.ts tests/application/PrototypeCrewStorage.test.ts tests/application/RoomPrefabAppearance.test.ts tests/application/SecureConfigPackage.test.ts tests/application/SecureConfigBootstrap.test.ts",
     "test:security": "node --test tools/release-security/release-security.test.mjs",
     "test:security-api": "python -m unittest discover -s services/api/tests -v",
     "test:launcher": "node tools/release-security/compile-launcher-smoke.mjs",
