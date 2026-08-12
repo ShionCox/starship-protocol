@@ -1,83 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  SHIP_LAYOUT_SCHEMA_VERSION,
-  ShipGridModel,
-  restoreShipLayout,
-  serializeShipLayout,
-} from '../../assets/scripts/game-core/ShipGridModel.ts';
+import { SHIP_LAYOUT_SCHEMA_VERSION, ShipGridModel, restoreShipLayout, serializeShipLayout } from '../../assets/scripts/game-core/ShipGridModel.ts';
+import { hull, placement } from './fixtures.ts';
 
-test('布局快照只保存版本、逻辑网格和稳定房间 ID，并可完整恢复', () => {
-  const grid = new ShipGridModel();
-  assert.equal(grid.placeRoom({ id: 'room-reactor-1', x: 3, y: 4, width: 2, height: 2 }).ok, true);
-
+test('布局快照保存船体、定义ID、实例ID和逻辑坐标并可恢复', () => {
+  const definition = hull();
+  const grid = new ShipGridModel(definition);
+  grid.placeRoom(placement('room-reactor-1', 'room-reactor', 3, 4));
   const json = serializeShipLayout(grid);
   const raw = JSON.parse(json) as Record<string, unknown>;
   assert.equal(raw.schemaVersion, SHIP_LAYOUT_SCHEMA_VERSION);
+  assert.equal(raw.hullId, definition.id);
   assert.equal('worldPosition' in raw, false);
-  assert.deepEqual(raw.rooms, [{ id: 'room-reactor-1', x: 3, y: 4, width: 2, height: 2 }]);
-
-  const restored = restoreShipLayout(json, 20, 10);
+  const restored = restoreShipLayout(json, definition);
   assert.equal(restored.ok, true);
-  if (restored.ok) {
-    assert.deepEqual(restored.grid.getRooms(), grid.getRooms());
+  if (restored.ok) assert.deepEqual(restored.grid.getRooms(), grid.getRooms());
+});
+
+test('损坏、版本不兼容、船体不匹配、重叠和重复实例安全失败', () => {
+  const definition = hull();
+  assert.equal(restoreShipLayout('{', definition).ok, false);
+  assert.equal(restoreShipLayout(JSON.stringify({ schemaVersion: 2 }), definition).ok, false);
+  assert.equal(restoreShipLayout(JSON.stringify({ schemaVersion: 1, hullId: 'hull-other', rooms: [] }), definition).ok, false);
+  const invalidSnapshots = [
+    [placement('room-a-1', 'room-a', 0, 0), placement('room-b-1', 'room-b', 1, 1)],
+    [placement('room-a-1', 'room-a', 0, 0, 1, 1), placement('room-a-1', 'room-a', 2, 0, 1, 1)],
+    [{ ...placement('room-a-1', 'room-a', 0, 0, 1, 1), x: 0.5 }],
+  ];
+  for (const rooms of invalidSnapshots) {
+    assert.equal(restoreShipLayout(JSON.stringify({ schemaVersion: 1, hullId: definition.id, rooms }), definition).ok, false);
   }
 });
 
-test('损坏、版本不兼容、网格不匹配和重叠存档会安全失败', () => {
-  assert.deepEqual(restoreShipLayout('{', 20, 10).ok, false);
-  assert.deepEqual(restoreShipLayout(JSON.stringify({ schemaVersion: 2 }), 20, 10).ok, false);
-  assert.deepEqual(
-    restoreShipLayout(JSON.stringify({ schemaVersion: 1, gridWidth: 10, gridHeight: 10, rooms: [] }), 20, 10).ok,
-    false,
-  );
-  const overlapping = JSON.stringify({
-    schemaVersion: 1,
-    gridWidth: 20,
-    gridHeight: 10,
-    rooms: [
-      { id: 'room-a', x: 0, y: 0, width: 2, height: 2 },
-      { id: 'room-b', x: 1, y: 1, width: 2, height: 2 },
-    ],
-  });
-  assert.deepEqual(restoreShipLayout(overlapping, 20, 10).ok, false);
-
-  const duplicateId = JSON.stringify({
-    schemaVersion: 1,
-    gridWidth: 20,
-    gridHeight: 10,
-    rooms: [
-      { id: 'room-a', x: 0, y: 0, width: 1, height: 1 },
-      { id: 'room-a', x: 2, y: 0, width: 1, height: 1 },
-    ],
-  });
-  assert.deepEqual(restoreShipLayout(duplicateId, 20, 10).ok, false);
-
-  const fractionalPosition = JSON.stringify({
-    schemaVersion: 1,
-    gridWidth: 20,
-    gridHeight: 10,
-    rooms: [{ id: 'room-a', x: 0.5, y: 0, width: 1, height: 1 }],
-  });
-  assert.deepEqual(restoreShipLayout(fractionalPosition, 20, 10).ok, false);
-});
-
-test('恢复布局时使用当前场景的有效船体格重新校验房间', () => {
-  const validCells = [];
-  for (let y = 0; y < 10; y += 1) {
-    for (let x = 0; x < 20; x += 1) {
-      if (x > 1 || y < 8) {
-        validCells.push({ x, y });
-      }
-    }
-  }
-
-  const roomOnInvalidHull = JSON.stringify({
-    schemaVersion: 1,
-    gridWidth: 20,
-    gridHeight: 10,
-    rooms: [{ id: 'room-reactor-1', x: 0, y: 8, width: 2, height: 2 }],
-  });
-  assert.equal(restoreShipLayout(roomOnInvalidHull, 20, 10, validCells).ok, false);
+test('恢复时按当前船体Mask重新校验', () => {
+  const mask = Array<number>(20 * 10).fill(1);
+  for (let y = 8; y < 10; y += 1) for (let x = 0; x < 2; x += 1) mask[y * 20 + x] = 0;
+  const definition = hull('hull-mask', 20, 10, mask);
+  const json = JSON.stringify({ schemaVersion: 1, hullId: definition.id, rooms: [placement('room-reactor-1', 'room-reactor', 0, 8)] });
+  assert.equal(restoreShipLayout(json, definition).ok, false);
 });

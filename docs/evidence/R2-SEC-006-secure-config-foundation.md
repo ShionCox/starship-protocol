@@ -1,5 +1,7 @@
 # R2-SEC-006：Secure ConfigRegistry 基础实现证据
 
+> 历史实验记录：Secure ConfigRegistry、Native 桥和服务样例已在 2026-08-12 删除。未来 R2 重新实现前，本文件不构成当前能力证据。
+
 - 日期：2026-08-09
 - 范围：客户端加密包解析、唯一 ConfigRegistry、Cocos Windows Native AES-GCM 插件
 - 结论：安全启动装配、Web 回归、Creator Windows 工程生成、MSVC Release 链接和真实 EXE 启动已验证；真实 HTTPS Bootstrap/CDN 正向链路尚未接通，因此 R2-SEC-006 主项保持未勾选。

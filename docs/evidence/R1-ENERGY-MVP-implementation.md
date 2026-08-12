@@ -1,5 +1,7 @@
 # R1 能源纵切实现证据
 
+> 历史证据（已冻结）：本文件记录 PrototypeScene 与独立能源 Key 阶段。2026-08-12 ADR-0004 已将运行时改为 ShipModel + 单一玩家状态 Envelope；旧 Bootstrap/Storage/fallback 已删除。当前完成状态只看 `R1-FOUNDATION-CHECKLIST.md`。
+
 ## 范围
 
 本批次完成 R1 顺序中的第 3 项“能源”，仍保持 `ShipLayoutSnapshot` 为 R0 的纯布局快照；动态能源分配不写入房间布局存档。

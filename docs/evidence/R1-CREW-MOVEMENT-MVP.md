@@ -1,5 +1,7 @@
 # R1 船员移动最小可玩闭环证据
 
+> 历史证据（已冻结）：本文件证明旧 PrototypeScene 纵切曾通过，不证明 ADR-0004 三场景/共享 UI 重基线已经完成。旧 PrototypeCrewStorage 与兼容 Bootstrap 已删除，当前状态只看 `R1-FOUNDATION-CHECKLIST.md`。
+
 状态：2026-08-12 完成自动测试、Creator 3.8.8 人工验收、正式 Web Desktop 构建与生成产物实际运行。下一阶段可以进入维修系统；本批次未实现岗位加成、维修、武器开火、伤害、死亡、跨甲板电梯、AI、Replay 或 PvE。
 
 ## 已实现闭环

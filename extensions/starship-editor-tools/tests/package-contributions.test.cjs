@@ -17,11 +17,16 @@ test('扩展清单保留资源菜单，并只提供公开创作面板入口', ()
   assert.ok(packageJson.contributions?.messages?.['create-room-instance']);
   assert.ok(packageJson.contributions?.messages?.['update-room-definition']);
   assert.ok(packageJson.contributions?.messages?.['get-authoring-state']);
-  assert.ok(packageJson.contributions?.messages?.['configure-r1-energy-scene']);
   assert.ok(packageJson.contributions?.messages?.['create-crew-content']);
   assert.ok(packageJson.contributions?.messages?.['create-crew-instance']);
   assert.ok(packageJson.contributions?.messages?.['update-crew-definition']);
-  assert.ok(packageJson.contributions?.messages?.['configure-r1-crew-scene']);
+  assert.ok(packageJson.contributions?.messages?.['create-hull-definition']);
+  assert.ok(packageJson.contributions?.messages?.['update-hull-definition']);
+  assert.ok(packageJson.contributions?.messages?.['create-foundation-prefabs']);
+  assert.ok(packageJson.contributions?.messages?.['mount-shared-ui']);
+  assert.ok(packageJson.contributions?.messages?.['wire-scene-foundation']);
+  assert.equal(packageJson.contributions?.messages?.['configure-r1-energy-scene'], undefined);
+  assert.equal(packageJson.contributions?.messages?.['configure-r1-crew-scene'], undefined);
   assert.equal(packageJson.version, '1.5.0');
   assert.equal(JSON.stringify(packageJson).includes(['hierarchy', 'menu-adapter'].join('-')), false);
   assert.equal(JSON.stringify(packageJson).includes(['open', 'room', 'catalog'].join('-')), false);

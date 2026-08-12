@@ -102,7 +102,7 @@
     "__prefab": {
       "__id__": 5
     },
-    "roomInstanceId": "room-reactor-1",
+    "roomInstanceId": "",
     "roomDefinitionId": "room-shield",
     "definitionAsset": {
       "__uuid__": "e0070d1a-2fed-42bb-91b9-b3f3b8093558",

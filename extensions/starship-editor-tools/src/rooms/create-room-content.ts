@@ -1,5 +1,6 @@
 import { ROOM_CONFIG_DIRECTORY } from '../constants';
 import type { AssetDbPort } from '../shared/editor-asset-db';
+import { describeRollback, rollbackCreatedAssets } from '../shared/rollback-assets';
 
 export const ROOM_CATEGORIES = [
   'ENERGY',
@@ -111,13 +112,8 @@ export async function createRoomContent(
         throw new Error(`复制预制体失败：${prefabUrl}`);
       }
     } catch (copyError) {
-      let rollbackMessage = '';
-      try {
-        await assetDb.deleteAsset(configUrl);
-      } catch (rollbackError) {
-        rollbackMessage = `；回滚定义失败：${toMessage(rollbackError)}`;
-      }
-      return { ok: false, message: `${toMessage(copyError)}${rollbackMessage}` };
+      const rollbackErrors = await rollbackCreatedAssets(assetDb, [prefabUrl, configUrl]);
+      return { ok: false, message: `${toMessage(copyError)}；${describeRollback(rollbackErrors)}` };
     }
 
     return {

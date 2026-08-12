@@ -1,11 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import { CREW_CONFIG_DIRECTORY } from '../constants';
 import type { AssetDbPort, AssetInfo } from '../shared/editor-asset-db';
 
 const CREW_VIEW_SCRIPT_URL = 'db://assets/scripts/presentation/CrewView.ts';
-const CREW_VIEW_SCRIPT_META_PATH = 'assets/scripts/presentation/CrewView.ts.meta';
 const CREW_ID_PATTERN = /^crew-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CREW_ROLES = new Set(['ENGINEER', 'GUNNER']);
 
@@ -91,17 +87,7 @@ async function resolveCrewViewScriptUuid(assetDb: AssetDbPort): Promise<string> 
   if (direct) return direct;
   const info = await assetDb.queryInfo(CREW_VIEW_SCRIPT_URL);
   if (info?.uuid) return info.uuid;
-  const scripts = await assetDb.queryAssets({ extname: '.ts', pattern: 'db://assets/**' });
-  const discovered = scripts.find((asset) => asset.url.endsWith('/CrewView.ts'))?.uuid;
-  if (discovered) return discovered;
-  const projectPath = (globalThis as { Editor?: { Project?: { path?: string } } }).Editor?.Project?.path;
-  if (!projectPath) return '';
-  try {
-    const meta = JSON.parse(await readFile(join(projectPath, CREW_VIEW_SCRIPT_META_PATH), 'utf8')) as { uuid?: unknown };
-    return typeof meta.uuid === 'string' ? meta.uuid : '';
-  } catch {
-    return '';
-  }
+  return '';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

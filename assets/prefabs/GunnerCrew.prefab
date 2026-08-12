@@ -311,13 +311,13 @@
     "__prefab": {
       "__id__": 13
     },
-    "crewInstanceId": "crew-gunner-1",
+    "crewInstanceId": "",
     "crewDefinitionId": "crew-gunner",
     "definitionAsset": {
       "__uuid__": "db17ff8a-b45a-420c-a0a4-c42d9fd0df99",
       "__expectedType__": "cc.JsonAsset"
     },
-    "initialRoomInstanceId": "room-reactor-1",
+    "initialRoomInstanceId": "",
     "initialStationIndex": 0,
     "bodyColor": {
       "__type__": "cc.Color",

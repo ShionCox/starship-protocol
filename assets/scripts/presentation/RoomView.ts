@@ -1,5 +1,6 @@
 import {
   _decorator,
+  Canvas,
   Color,
   Component,
   error,
@@ -16,8 +17,7 @@ import {
 } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW, NATIVE } from 'cc/env';
 
-import { PrototypeSceneSettings } from '../bootstrap/PrototypeSceneSettings';
-import { findPrototypeSceneNode } from '../bootstrap/PrototypeSceneNodes';
+import { findOwningShipView, ShipView } from './ShipView';
 import {
   parseRoomDefinition,
   type RoomDefinition,
@@ -33,6 +33,7 @@ import type {
 const { ccclass, executeInEditMode, menu, property } = _decorator;
 
 type RoomMoveHandler = (command: MoveRoomCommand) => PlacementValidation;
+type RoomMoveCommitHandler = (command: MoveRoomCommand) => Promise<PlacementValidation>;
 type PanBlockHandler = (blocked: boolean) => void;
 type RoomClickHandler = (roomInstanceId: string) => void;
 
@@ -45,11 +46,11 @@ export class RoomView extends Component {
     tooltip: '同一场景内必须唯一；存档和移动命令使用这个稳定字符串标识。',
     group: '房间实例',
   })
-  public roomInstanceId = 'room-reactor-1';
+  public roomInstanceId = '';
 
   @property({
     displayName: '房间定义标识',
-    tooltip: '正式包从受认证配置注册表按此稳定标识取规则；必须与绑定房间规则文件的标识一致。',
+    tooltip: '必须与绑定房间规则文件的稳定标识一致。',
     group: '房间定义',
   })
   public roomDefinitionId = 'room-reactor';
@@ -57,7 +58,7 @@ export class RoomView extends Component {
   @property({
     type: JsonAsset,
     displayName: '房间定义',
-    tooltip: '仅供编辑器预览和网页原型使用；Windows 正式包不会导出此引用，运行时从受认证配置注册表读取。',
+    tooltip: '房间规则的版本化 JSON；未来联网客户端由配置目录适配器提供同一份已验证定义。',
     group: '房间定义',
   })
   public definitionAsset: JsonAsset | null = null;
@@ -83,9 +84,9 @@ export class RoomView extends Component {
   private editorSnapScheduled = false;
   private definition: RoomDefinition | null = null;
   private placement: RoomPlacement | null = null;
-  private sceneSettings: PrototypeSceneSettings | null = null;
+  private shipView: ShipView | null = null;
   private previewRoomMove: RoomMoveHandler | null = null;
-  private commitRoomMove: RoomMoveHandler | null = null;
+  private commitRoomMove: RoomMoveCommitHandler | null = null;
   private setPanBlocked: PanBlockHandler | null = null;
   private handleRoomClick: RoomClickHandler | null = null;
   private runtimeCanvas: Node | null = null;
@@ -155,20 +156,20 @@ export class RoomView extends Component {
     return result;
   }
 
-  /** 正式 Native 运行时只把稳定 ID 交给 ConfigRegistry，不读取源 JsonAsset。 */
+  /** 返回定义稳定 ID，供本地配置目录和未来服务端配置目录使用。 */
   public getRoomDefinitionId(): string {
     return this.roomDefinitionId.trim();
   }
 
   /** 供编辑器语义创建命令把新实例放到已计算的整数逻辑格。 */
   public applyEditorPlacement(position: GridPosition): boolean {
-    const sceneSettings = this.findSceneSettings();
+    const shipView = this.findShipView();
     const parent = this.node.parent;
     const definitionResult = this.resolveRoomDefinition();
-    if (sceneSettings === null || parent === null || definitionResult.ok === false) {
+    if (shipView === null || parent === null || definitionResult.ok === false) {
       return false;
     }
-    const local = sceneSettings.gridPositionToParentLocal(
+    const local = shipView.gridPositionToParentLocal(
       parent,
       position,
       definitionResult.definition.width,
@@ -200,6 +201,8 @@ export class RoomView extends Component {
    * 组件销毁仍通过 Cocos 公共对象生命周期完成，转换后的资源必须由 Creator 保存。
    */
   public removeForAuthoringTemplateConversion(): boolean {
+    // 复制房间 Prefab 作为正式基础模板时，不应把房间专属的橙色图形带入 UI 或飞船根。
+    this.getComponent(Graphics)?.destroy();
     this.destroy();
     return true;
   }
@@ -217,7 +220,7 @@ export class RoomView extends Component {
     readonly gridPosition?: GridPosition;
   } {
     const definitionResult = this.resolveRoomDefinition();
-    const sceneSettings = this.findSceneSettings();
+    const shipView = this.findShipView();
     const base = {
       roomInstanceId: this.roomInstanceId.trim(),
       roomDefinitionId: this.roomDefinitionId.trim(),
@@ -225,14 +228,14 @@ export class RoomView extends Component {
     if (definitionResult.ok === false) {
       return { ...base, ok: false, message: definitionResult.message };
     }
-    if (sceneSettings === null) {
-      return { ...base, ok: false, message: '场景缺少 PrototypeSceneSettings，无法换算逻辑格位置' };
+    if (shipView === null) {
+      return { ...base, ok: false, message: '房间不属于有效飞船视图，无法换算逻辑格位置' };
     }
     const parent = this.node.parent;
     if (parent === null) {
       return { ...base, ok: false, message: '房间缺少父节点，无法换算逻辑格位置' };
     }
-    const gridPosition = sceneSettings.parentLocalCenterToGrid(
+    const gridPosition = shipView.parentLocalCenterToGrid(
       parent,
       this.node.position,
       definitionResult.definition.width,
@@ -256,16 +259,16 @@ export class RoomView extends Component {
   public bind(
     definition: RoomDefinition,
     placement: RoomPlacement,
-    sceneSettings: PrototypeSceneSettings,
+    shipView: ShipView,
     previewRoomMove: RoomMoveHandler | null = null,
-    commitRoomMove: RoomMoveHandler | null = null,
+    commitRoomMove: RoomMoveCommitHandler | null = null,
     setPanBlocked: PanBlockHandler | null = null,
     handleRoomClick: RoomClickHandler | null = null,
   ): void {
     const parent = this.node.parent;
     const roomCenter = parent === null
       ? null
-      : sceneSettings.gridPositionToParentLocal(parent, placement, definition.width, definition.height);
+      : shipView.gridPositionToParentLocal(parent, placement, definition.width, definition.height);
     if (roomCenter === null) {
       error('[UI] 房间缺少父节点或场景网格设置，无法绑定到逻辑网格');
       return;
@@ -273,14 +276,14 @@ export class RoomView extends Component {
 
     this.definition = definition;
     this.placement = { ...placement };
-    this.sceneSettings = sceneSettings;
+    this.shipView = shipView;
     this.previewRoomMove = previewRoomMove;
     this.commitRoomMove = commitRoomMove;
     this.setPanBlocked = setPanBlocked;
     this.handleRoomClick = handleRoomClick;
-    this.node.name = `Room-${placement.id}`;
+    this.node.name = `房间-${placement.instanceId}`;
     this.node.setPosition(roomCenter);
-    this.draw(definition.width, definition.height, sceneSettings.cellSize);
+    this.draw(definition.width, definition.height, shipView.cellSize);
   }
 
   private draw(
@@ -334,16 +337,15 @@ export class RoomView extends Component {
     if (
       this.definition === null ||
       this.placement === null ||
-      this.sceneSettings === null ||
+      this.shipView === null ||
       this.previewRoomMove === null ||
       this.commitRoomMove === null
     ) {
-      error('[INPUT] RoomView 尚未完成运行时绑定，请检查 AppRoot 的 PrototypeBootstrap');
+      error('[INPUT] 房间视图尚未完成运行时绑定，请检查场景装配组件');
       return;
     }
 
-    const scene = this.node.scene;
-    const canvas = scene === null ? null : findPrototypeSceneNode(scene, 'canvas');
+    const canvas = this.node.scene?.getComponentInChildren(Canvas)?.node ?? null;
     if (canvas === null) {
       error('[INPUT] 运行时拖放缺少 Canvas');
       return;
@@ -370,7 +372,7 @@ export class RoomView extends Component {
       !this.isDraggingAtRuntime ||
       this.definition === null ||
       this.placement === null ||
-      this.sceneSettings === null ||
+      this.shipView === null ||
       this.previewRoomMove === null
     ) {
       return;
@@ -386,7 +388,7 @@ export class RoomView extends Component {
     }
     const pointerWorld = this.getPointerWorld(event);
     const candidateWorld = Vec3.add(this.runtimeCandidateWorld, pointerWorld, this.runtimeDragOffset);
-    const gridPosition = this.sceneSettings.worldCenterToGrid(
+    const gridPosition = this.shipView.worldCenterToGrid(
       candidateWorld,
       this.definition.width,
       this.definition.height,
@@ -398,11 +400,11 @@ export class RoomView extends Component {
 
     const command: MoveRoomCommand = {
       type: 'MOVE_ROOM',
-      roomId: this.placement.id,
+      roomInstanceId: this.placement.instanceId,
       ...gridPosition,
     };
     const validation = this.previewRoomMove(command);
-    const candidateLocal = this.sceneSettings.gridPositionToParentLocal(
+    const candidateLocal = this.shipView.gridPositionToParentLocal(
       parent,
       gridPosition,
       this.definition.width,
@@ -418,19 +420,19 @@ export class RoomView extends Component {
     this.draw(
       this.definition.width,
       this.definition.height,
-      this.sceneSettings.cellSize,
+      this.shipView.cellSize,
       validation.ok ? this.validPreviewBorderColor : this.invalidPreviewBorderColor,
     );
   }
 
-  private handleRuntimeMouseUp(event: EventMouse): void {
+  private async handleRuntimeMouseUp(event: EventMouse): Promise<void> {
     if (!this.isDraggingAtRuntime) {
       return;
     }
 
     event.propagationStopped = true;
     if (!this.runtimePointerMoved) {
-      if (this.placement !== null) this.handleRoomClick?.(this.placement.id);
+      if (this.placement !== null) this.handleRoomClick?.(this.placement.instanceId);
       this.restoreRuntimePlacement();
       this.drawRuntimeNormalState();
       this.stopRuntimeDrag();
@@ -438,7 +440,10 @@ export class RoomView extends Component {
     }
     const command = this.runtimeCandidate;
     const preview = this.runtimeCandidateValidation;
-    const committed = command !== null && preview?.ok === true && this.commitRoomMove?.(command).ok === true;
+    const commitResult = command !== null && preview?.ok === true
+      ? await this.commitRoomMove?.(command)
+      : null;
+    const committed = commitResult?.ok === true;
     if (committed && this.placement !== null && command !== null) {
       this.placement = { ...this.placement, x: command.x, y: command.y };
     } else {
@@ -450,11 +455,11 @@ export class RoomView extends Component {
 
   private restoreRuntimePlacement(): void {
     const parent = this.node.parent;
-    if (parent === null || this.definition === null || this.placement === null || this.sceneSettings === null) {
+    if (parent === null || this.definition === null || this.placement === null || this.shipView === null) {
       return;
     }
 
-    const originalLocal = this.sceneSettings.gridPositionToParentLocal(
+    const originalLocal = this.shipView.gridPositionToParentLocal(
       parent,
       this.placement,
       this.definition.width,
@@ -466,8 +471,8 @@ export class RoomView extends Component {
   }
 
   private drawRuntimeNormalState(): void {
-    if (this.definition !== null && this.sceneSettings !== null) {
-      this.draw(this.definition.width, this.definition.height, this.sceneSettings.cellSize);
+    if (this.definition !== null && this.shipView !== null) {
+      this.draw(this.definition.width, this.definition.height, this.shipView.cellSize);
     }
   }
 
@@ -491,8 +496,8 @@ export class RoomView extends Component {
 
   private refreshPreview(): void {
     this.synchronizeEditorGraphicsTransform();
-    const sceneSettings = this.findSceneSettings();
-    const cellSize = sceneSettings?.cellSize ?? 48;
+    const shipView = this.findShipView();
+    const cellSize = shipView?.cellSize ?? 48;
     const definitionResult = this.resolveRoomDefinition();
     if (definitionResult.ok === false) {
       const errorSignature = `definition-error|${definitionResult.code}|${definitionResult.message}|${cellSize}`;
@@ -592,9 +597,9 @@ export class RoomView extends Component {
       return;
     }
 
-    const sceneSettings = this.findSceneSettings();
+    const shipView = this.findShipView();
     const parent = this.node.parent;
-    if (sceneSettings === null || !sceneSettings.snapRoomsInEditor || parent === null) {
+    if (shipView === null || !shipView.snapRoomsInEditor || parent === null) {
       return;
     }
     const definitionResult = this.resolveRoomDefinition();
@@ -603,7 +608,7 @@ export class RoomView extends Component {
     }
     const definition = definitionResult.definition;
 
-    const gridPosition = sceneSettings.parentLocalCenterToGrid(
+    const gridPosition = shipView.parentLocalCenterToGrid(
       parent,
       this.node.position,
       definition.width,
@@ -613,8 +618,9 @@ export class RoomView extends Component {
       return;
     }
 
-    const maxX = sceneSettings.gridColumns - definition.width;
-    const maxY = sceneSettings.gridRows - definition.height;
+    const hull = shipView.getHullDefinition();
+    const maxX = hull.gridWidth - definition.width;
+    const maxY = hull.gridHeight - definition.height;
     if (maxX < 0 || maxY < 0) {
       return;
     }
@@ -624,7 +630,7 @@ export class RoomView extends Component {
       x: Math.min(Math.max(gridPosition.x, 0), maxX),
       y: Math.min(Math.max(gridPosition.y, 0), maxY),
     };
-    const snappedParentCenter = sceneSettings.gridPositionToParentLocal(
+    const snappedParentCenter = shipView.gridPositionToParentLocal(
       parent,
       boundedGridPosition,
       definition.width,
@@ -643,8 +649,7 @@ export class RoomView extends Component {
     this.isSnappingInEditor = false;
   }
 
-  private findSceneSettings(): PrototypeSceneSettings | null {
-    const scene = this.node.scene;
-    return scene === null ? null : scene.getComponentInChildren(PrototypeSceneSettings);
+  private findShipView(): ShipView | null {
+    return findOwningShipView(this.node);
   }
 }

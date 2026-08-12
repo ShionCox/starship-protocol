@@ -2,6 +2,8 @@ import {
   DEFAULT_PREFAB_DIRECTORY,
   CREW_CATALOG_CHANGE_MESSAGE,
   CREW_CONFIG_DIRECTORY,
+  HULL_CATALOG_CHANGE_MESSAGE,
+  HULL_CONFIG_DIRECTORY,
   PACKAGE_NAME,
   ROOM_CATALOG_CHANGE_MESSAGE,
   ROOM_CONFIG_DIRECTORY,
@@ -20,7 +22,9 @@ import {
   getRoomCatalog,
   setRoomCatalog,
 } from './rooms/room-module';
-import { initializePrototypeScene } from './scene/prototype-skeleton';
+import { initializeSceneSkeleton } from './scene/scene-skeleton';
+import type { SceneSkeletonKind } from './scene/scene-skeleton';
+import { createFoundationPrefabs, mountSharedUi, wireSceneFoundation } from './scene/foundation-prefab-authoring';
 import { bindRoomDefinitionToOpenPrefab } from './rooms/bind-room-prefab';
 import { resolveRoomPlacementTarget } from './rooms/room-scene-authoring';
 import {
@@ -32,26 +36,24 @@ import {
   recognizeAuthoringSelection,
   type AuthoringSelection,
 } from './authoring-selection';
-import {
-  updateSceneCoreSettings,
-  type SceneCoreSettingsRequest,
-} from './scene/scene-core-authoring';
-import { configureR1EnergyScene } from './scene/r1-energy-authoring';
 import { discoverCrewPrefabs } from './crew/discover-crew-prefabs';
 import {
   createCrewContent as createCrewContentWithAssetDb,
-  rollbackCrewAssets,
   type CrewCreationRequest,
 } from './crew/create-crew-content';
 import { bindCrewDefinitionToOpenPrefab } from './crew/bind-crew-prefab';
 import { createCrewFromSelection, getCrewCatalog, setCrewCatalog } from './crew/crew-module';
 import { updateCrewDefinition, type CrewDefinitionEditRequest } from './crew/edit-crew-definition';
-import { configureR1CrewScene } from './scene/r1-crew-authoring';
 import {
-  createCrewMemberTemplate,
-  createPowerRoomRowTemplate,
-  replacePowerRowsWithPrefab,
-} from './scene/prefab-template-authoring';
+  createHullDefinition as createHullDefinitionWithAssetDb,
+  discoverHullDefinitions,
+  getHullCatalog,
+  setHullCatalog,
+  updateHullDefinition as updateHullDefinitionWithAssetDb,
+} from './hulls/hull-catalog';
+import type { HullDefinitionInput } from './hulls/hull-definition';
+import { createShipInstance as createShipInstanceInScene } from './hulls/ship-scene-authoring';
+import { describeRollback, rollbackCreatedAssets } from './shared/rollback-assets';
 
 export interface AuthoringState {
   readonly selection: AuthoringSelection;
@@ -64,13 +66,16 @@ export interface AuthoringState {
   };
   readonly rooms: ReturnType<typeof getRoomCatalog>;
   readonly crews: ReturnType<typeof getCrewCatalog>;
+  readonly hulls: ReturnType<typeof getHullCatalog>;
   readonly warnings: readonly string[];
 }
 
 let catalogWarnings: readonly string[] = [];
 let crewCatalogWarnings: readonly string[] = [];
+let hullCatalogWarnings: readonly string[] = [];
 let catalogFingerprint = '';
 let crewCatalogFingerprint = '';
+let hullCatalogFingerprint = '';
 let catalogRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 let assetChangeListener: ((...args: unknown[]) => void) | undefined;
 let extensionLoaded = false;
@@ -105,17 +110,10 @@ export const methods = {
       } catch (error) {
         failureMessage = error instanceof Error ? error.message : String(error);
       }
-      const rollbackErrors: string[] = [];
-      for (const url of [result.prefabUrl, result.configUrl]) {
-        try {
-          await editorAssetDb.deleteAsset(url);
-        } catch (error) {
-          rollbackErrors.push(`${url}：${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
+      const rollbackErrors = await rollbackCreatedAssets(editorAssetDb, [result.prefabUrl, result.configUrl]);
       return {
         ok: false as const,
-        message: `${failureMessage ?? '房间定义绑定失败'}；已回滚新资源${rollbackErrors.length === 0 ? '' : `，回滚失败：${rollbackErrors.join('；')}`}`,
+        message: `${failureMessage ?? '房间定义绑定失败'}；${describeRollback(rollbackErrors)}`,
       };
     });
   },
@@ -143,11 +141,8 @@ export const methods = {
       } catch (cause) {
         failureMessage = cause instanceof Error ? cause.message : String(cause);
       }
-      const rollbackErrors = await rollbackCrewAssets(editorAssetDb, [result.prefabUrl, result.configUrl]);
-      const rollbackMessage = rollbackErrors.length === 0
-        ? '已回滚新资源'
-        : `回滚失败，资源清理未完成，无法确认以下资源已删除：${rollbackErrors.join('；')}`;
-      return { ok: false as const, message: `${failureMessage ?? '船员定义绑定失败'}；${rollbackMessage}` };
+      const rollbackErrors = await rollbackCreatedAssets(editorAssetDb, [result.prefabUrl, result.configUrl]);
+      return { ok: false as const, message: `${failureMessage ?? '船员定义绑定失败'}；${describeRollback(rollbackErrors)}` };
     });
   },
   openCreatedPrefab(prefabUrl: string) {
@@ -157,11 +152,22 @@ export const methods = {
     return validateOpenRoomPrefab(editorSceneQuery);
   },
   async refreshAuthoringState() {
-    await Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow()]);
+    await Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow(), refreshHullCatalogNow()]);
     return await getAuthoringState();
   },
-  initializePrototypeScene() {
-    return initializePrototypeScene(editorSceneQuery);
+  async initializeSceneSkeleton(kind: SceneSkeletonKind) {
+    const result = await initializeSceneSkeleton(editorSceneQuery, kind);
+    if (result.ok) await Editor.Message.request('scene', 'save-scene');
+    return result;
+  },
+  async createFoundationPrefabs() {
+    return await createFoundationPrefabs(editorAssetDb, editorSceneQuery);
+  },
+  async mountSharedUi(kind: SceneSkeletonKind) {
+    return await mountSharedUi(editorAssetDb, editorSceneQuery, kind);
+  },
+  async wireSceneFoundation(kind: SceneSkeletonKind) {
+    return await wireSceneFoundation(editorSceneQuery, kind);
   },
   async getAuthoringState() {
     return await getAuthoringState();
@@ -182,34 +188,25 @@ export const methods = {
     if (result.ok) await refreshCrewCatalogNow();
     return result;
   },
-  async updateSceneCoreSettings(request: SceneCoreSettingsRequest) {
-    return await updateSceneCoreSettings(editorSceneQuery, getSelectedNodeUuid(), request);
-  },
-  async configureR1EnergyScene() {
-    const result = await configureR1EnergyScene(editorSceneQuery);
-    if (result.ok) await Editor.Message.request('scene', 'save-scene');
+  async createHullDefinition(request: HullDefinitionInput) {
+    const result = await createHullDefinitionWithAssetDb(request, editorAssetDb);
+    if (result.ok) await refreshHullCatalogNow();
     return result;
   },
-  async configureR1CrewScene() {
-    const result = await configureR1CrewScene(editorSceneQuery);
-    if (result.ok) await Editor.Message.request('scene', 'save-scene');
+  async updateHullDefinition(request: HullDefinitionInput & { readonly configUrl: string }) {
+    const result = await updateHullDefinitionWithAssetDb(request, editorAssetDb);
+    if (result.ok) await refreshHullCatalogNow();
     return result;
   },
-  async createCrewMemberTemplate() {
-    return await createCrewMemberTemplate(editorAssetDb, editorSceneQuery);
-  },
-  async createPowerRoomRowTemplate() {
-    return await createPowerRoomRowTemplate(editorAssetDb, editorSceneQuery);
-  },
-  async replacePowerRowsWithPrefab() {
-    return await replacePowerRowsWithPrefab(editorAssetDb, editorSceneQuery);
+  async createShipInstance(entry: Parameters<typeof createShipInstanceInScene>[3]) {
+    return await createShipInstanceInScene(editorAssetDb, editorSceneQuery, { nodeUuid: getSelectedNodeUuid() }, entry);
   },
 };
 
 export function load(): void {
   extensionLoaded = true;
   registerAssetChangeListener();
-  void Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow()]).catch((cause: unknown) => {
+  void Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow(), refreshHullCatalogNow()]).catch((cause: unknown) => {
     console.warn(`[AUTHORING] 创作资源列表刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
   });
 }
@@ -250,6 +247,18 @@ async function refreshCrewCatalogNow() {
   return result;
 }
 
+async function refreshHullCatalogNow() {
+  const result = await discoverHullDefinitions(editorAssetDb);
+  setHullCatalog(result.entries);
+  hullCatalogWarnings = result.warnings;
+  const nextFingerprint = JSON.stringify(result);
+  const changed = nextFingerprint !== hullCatalogFingerprint;
+  hullCatalogFingerprint = nextFingerprint;
+  for (const warning of result.warnings) console.warn(`[HULL] ${warning}`);
+  if (changed) getBroadcastMessagePort()?.broadcast?.(HULL_CATALOG_CHANGE_MESSAGE);
+  return result;
+}
+
 async function getAuthoringState(): Promise<AuthoringState> {
   const selectedUuid = getSelectedNodeUuid();
   try {
@@ -282,7 +291,8 @@ async function getAuthoringState(): Promise<AuthoringState> {
       roomTarget,
       rooms: getRoomCatalog(),
       crews: getCrewCatalog(),
-      warnings: [...catalogWarnings, ...crewCatalogWarnings],
+      hulls: getHullCatalog(),
+      warnings: [...catalogWarnings, ...crewCatalogWarnings, ...hullCatalogWarnings],
     };
   } catch (cause) {
     return {
@@ -290,7 +300,8 @@ async function getAuthoringState(): Promise<AuthoringState> {
       roomTarget: { ok: false, mode: 'blocked', message: `无法读取当前场景：${cause instanceof Error ? cause.message : String(cause)}` },
       rooms: getRoomCatalog(),
       crews: getCrewCatalog(),
-      warnings: [...catalogWarnings, ...crewCatalogWarnings],
+      hulls: getHullCatalog(),
+      warnings: [...catalogWarnings, ...crewCatalogWarnings, ...hullCatalogWarnings],
     };
   }
 }
@@ -323,7 +334,7 @@ async function handleAssetChange(value: unknown): Promise<void> {
   if (catalogRefreshTimer !== undefined) clearTimeout(catalogRefreshTimer);
   catalogRefreshTimer = setTimeout(() => {
     catalogRefreshTimer = undefined;
-    void Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow()]).catch((cause: unknown) => {
+    void Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow(), refreshHullCatalogNow()]).catch((cause: unknown) => {
       console.warn(`[AUTHORING] 创作资源列表自动刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
     });
   }, 200);
@@ -332,6 +343,7 @@ async function handleAssetChange(value: unknown): Promise<void> {
 async function isAuthoringAssetChange(uuid: string): Promise<boolean> {
   if (getRoomCatalog().some((entry) => entry.prefabUuid === uuid || entry.configUuid === uuid)) return true;
   if (getCrewCatalog().some((entry) => entry.prefabUuid === uuid || entry.configUuid === uuid)) return true;
+  if (getHullCatalog().some((entry) => entry.configUuid === uuid)) return true;
   try {
     const info = await editorAssetDb.queryInfo(uuid);
     return info === null || isAuthoringAssetUrl(info.url);
@@ -344,6 +356,7 @@ async function isAuthoringAssetChange(uuid: string): Promise<boolean> {
 function isAuthoringAssetUrl(url: string): boolean {
   return (url.startsWith(`${ROOM_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
     || (url.startsWith(`${CREW_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
+    || (url.startsWith(`${HULL_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
     || (url.startsWith(`${DEFAULT_PREFAB_DIRECTORY}/`) && url.endsWith('.prefab'));
 }
 

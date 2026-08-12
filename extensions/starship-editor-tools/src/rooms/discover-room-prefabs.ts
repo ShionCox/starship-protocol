@@ -1,10 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { ROOM_CONFIG_DIRECTORY } from '../constants';
 import type { AssetDbPort, AssetInfo } from '../shared/editor-asset-db';
 
 const ROOM_VIEW_SCRIPT_URL = 'db://assets/scripts/presentation/RoomView.ts';
-const ROOM_VIEW_SCRIPT_META_PATH = 'assets/scripts/presentation/RoomView.ts.meta';
 const ROOM_ID_PATTERN = /^room-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CATEGORIES = new Set([
   'ENERGY',
@@ -142,23 +139,7 @@ async function resolveRoomViewScriptUuid(assetDb: AssetDbPort): Promise<string> 
   const info = await assetDb.queryInfo(ROOM_VIEW_SCRIPT_URL);
   if (typeof info?.uuid === 'string' && info.uuid !== '') return info.uuid;
 
-  // 某些 Creator 3.8.8 导入状态下 query-uuid 在脚本首次刷新期间会暂时返回空值；
-  // 用公开 Asset DB 查询作为只读回退，避免把“尚未完成导入”误判为配置错误。
-  const scriptAssets = await assetDb.queryAssets({ extname: '.ts', pattern: 'db://assets/**' });
-  const roomView = scriptAssets.find((asset) => asset.url.endsWith('/RoomView.ts'));
-  if (roomView?.uuid) return roomView.uuid;
-
-  // 仅读取项目自身的 meta 作为导入状态回退；插件不改写任何序列化文件。
-  const projectPath = (globalThis as {
-    Editor?: { Project?: { path?: string } };
-  }).Editor?.Project?.path;
-  if (typeof projectPath !== 'string' || projectPath.length === 0) return '';
-  try {
-    const meta = JSON.parse(await readFile(join(projectPath, ROOM_VIEW_SCRIPT_META_PATH), 'utf8')) as { uuid?: unknown };
-    return typeof meta.uuid === 'string' ? meta.uuid : '';
-  } catch {
-    return '';
-  }
+  return '';
 }
 
 export function parseRoomDefinition(value: unknown): RoomDefinitionDocument | null {

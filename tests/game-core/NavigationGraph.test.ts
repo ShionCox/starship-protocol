@@ -10,10 +10,10 @@ function room(id: string, category: RoomDefinition['category'], crewCapacity: nu
 }
 
 const PLACEMENTS: readonly RoomPlacement[] = [
-  { id: 'room-reactor-1', x: 0, y: 0, width: 2, height: 2 },
-  { id: 'room-elevator-1', x: 2, y: 0, width: 2, height: 2 },
-  { id: 'room-laser-1', x: 4, y: 0, width: 2, height: 2 },
-  { id: 'room-shield-1', x: 6, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-reactor-1', definitionId: 'room-reactor', x: 0, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-elevator-1', definitionId: 'room-elevator', x: 2, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-laser-1', definitionId: 'room-laser', x: 4, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-shield-1', definitionId: 'room-shield', x: 6, y: 0, width: 2, height: 2 },
 ];
 
 const DEFINITIONS = new Map<string, RoomDefinition>([
@@ -40,8 +40,8 @@ test('导航图由共享边连接，固定路径经过电梯', () => {
 
 test('角点接触不连通，非相邻房间不会直接连接', () => {
   const placements: readonly RoomPlacement[] = [
-    { id: 'room-reactor-1', x: 0, y: 0, width: 2, height: 2 },
-    { id: 'room-elevator-1', x: 2, y: 2, width: 2, height: 2 },
+    { instanceId: 'room-reactor-1', definitionId: 'room-reactor', x: 0, y: 0, width: 2, height: 2 },
+    { instanceId: 'room-elevator-1', definitionId: 'room-elevator', x: 2, y: 2, width: 2, height: 2 },
   ];
   const definitions = new Map([...DEFINITIONS].filter(([id]) => id !== 'room-laser-1' && id !== 'room-shield-1'));
   const graph = new NavigationGraph(placements, definitions);
@@ -53,6 +53,6 @@ test('同代价路径按稳定节点 ID 决定并命中缓存，布局变化会�
   const first = graph.findPath(stationNodeId('room-reactor-1', 0), stationNodeId('room-shield-1', 0));
   const second = graph.findPath(stationNodeId('room-reactor-1', 0), stationNodeId('room-shield-1', 0));
   assert.deepEqual(second, first);
-  const moved = PLACEMENTS.map((placement) => placement.id === 'room-shield-1' ? { ...placement, x: 8 } : placement);
+  const moved = PLACEMENTS.map((placement) => placement.instanceId === 'room-shield-1' ? { ...placement, x: 8 } : placement);
   assert.notEqual(new NavigationGraph(moved, DEFINITIONS).version, graph.version);
 });

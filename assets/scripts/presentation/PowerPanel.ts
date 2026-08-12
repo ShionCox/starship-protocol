@@ -2,14 +2,16 @@ import {
   _decorator,
   Color,
   Component,
+  error,
   Graphics,
-  HorizontalTextAlignment,
   Label,
-  Node,
+  Layers,
   ProgressBar,
+  Node,
   UITransform,
-  VerticalTextAlignment,
   Widget,
+  HorizontalTextAlignment,
+  VerticalTextAlignment,
 } from 'cc';
 
 import {
@@ -28,6 +30,7 @@ export interface PowerPanelRoom {
 }
 
 export interface PowerPanelState {
+  readonly shipId: string;
   readonly availablePower: number;
   readonly allocatedPower: number;
   readonly allocations: readonly EnergyAllocation[];
@@ -39,7 +42,7 @@ export interface PowerPanelCommandResult {
   readonly state: PowerPanelState;
 }
 
-export type PowerCommandHandler = (command: EnergyCommand) => PowerPanelCommandResult;
+export type PowerCommandHandler = (command: EnergyCommand) => Promise<PowerPanelCommandResult>;
 
 /** R1 能源面板；只负责显示状态和发送 Command，不持有能源规则或存档。 */
 @ccclass('PowerPanel')
@@ -59,80 +62,66 @@ export class PowerPanel extends Component {
 
   private dispatch: PowerCommandHandler | null = null;
 
-  /**
-   * 当旧 PrototypeScene 尚未保存能源节点时创建 Web 原型兜底面板。
-   * Creator 场景中的持久 PowerPanel 优先使用；该方法不会创建 GameCore 或存档状态。
-   */
-  public static createRuntimeFallback(parent: Node): PowerPanel {
-    const node = new Node('能源面板');
-    parent.addChild(node);
-    node.addComponent(UITransform);
-    const panel = node.addComponent(PowerPanel);
-    panel.ensureAuthoringStructure();
-    return panel;
-  }
-
-  /** 供创作面板调用：创建可直接保存到场景的 HUD 内容与两条能源房间行。 */
-  public ensureAuthoringStructure(): boolean {
-    this.synchronizeUiRootSize();
-    const transform = this.getComponent(UITransform) ?? this.addComponent(UITransform);
-    transform.setContentSize(320, 220);
-    transform.anchorPoint.set(0.5, 0.5);
-    const widget = this.getComponent(Widget) ?? this.addComponent(Widget);
-    widget.isAlignTop = true;
-    widget.isAlignRight = true;
-    widget.top = 16;
-    widget.right = 16;
-
-    this.summaryLabel = ensurePanelLabel(this.node, '能源汇总', '能源：0 / 10', 0, 82, 18);
-    const progressNode = this.node.getChildByName('能源进度条') ?? new Node('能源进度条');
-    if (progressNode.parent === null) this.node.addChild(progressNode);
-    progressNode.setPosition(0, 51, 0);
-    const progressTransform = progressNode.getComponent(UITransform) ?? progressNode.addComponent(UITransform);
-    progressTransform.setContentSize(288, 18);
+  /** 仅供创作插件补齐可持久保存的面板节点；能源行随后由同一 PowerRoomRow Prefab 实例化。 */
+  public ensureAuthoringPrefabStructure(): boolean {
+    this.node.layer = Layers.Enum.UI_2D;
+    const existingTransform = this.getComponent(UITransform);
+    if (existingTransform === null) this.addComponent(UITransform).setContentSize(320, 220);
+    const existingWidget = this.getComponent(Widget);
+    if (existingWidget === null) {
+      const widget = this.addComponent(Widget);
+      widget.isAlignTop = true;
+      widget.isAlignRight = true;
+      widget.top = 16;
+      widget.right = 16;
+    }
+    this.getComponent(Graphics) ?? this.addComponent(Graphics);
+    this.summaryLabel = ensurePanelLabel(this.node, '能源汇总', '能源：0 / 10', 82, 18);
+    const existingProgress = this.node.getChildByName('能源进度条');
+    const progressNode = existingProgress ?? new Node('能源进度条');
+    if (existingProgress === null) {
+      this.node.addChild(progressNode);
+      progressNode.setPosition(0, 51, 0);
+      progressNode.addComponent(UITransform).setContentSize(288, 18);
+    }
+    progressNode.layer = Layers.Enum.UI_2D;
     progressNode.getComponent(Graphics) ?? progressNode.addComponent(Graphics);
     this.progressBar = progressNode.getComponent(ProgressBar) ?? progressNode.addComponent(ProgressBar);
-    this.statusLabel = ensurePanelLabel(this.node, '状态提示', '能源状态已就绪', 0, -87, 12);
-
-    const laser = PowerRoomRow.ensureAuthoringStructure(this.node, 'room-laser-1', '激光室');
-    const shield = PowerRoomRow.ensureAuthoringStructure(this.node, 'room-shield-1', '护盾室');
-    laser.node.setPosition(0, 12, 0);
-    shield.node.setPosition(0, -31, 0);
-    this.roomRows = [laser, shield];
-    this.drawChrome();
+    this.statusLabel = ensurePanelLabel(this.node, '状态提示', '能源状态已就绪', -87, 12);
+    if (existingTransform === null) this.drawChrome();
     return true;
   }
 
-  protected onEnable(): void {
-    this.drawChrome();
+  /** Prefab 行替换完成后刷新序列化白名单引用。 */
+  public refreshAuthoringReferences(): boolean {
+    this.roomRows = this.getAttachedRoomRows();
+    return this.roomRows.length > 0;
   }
 
-  /** 为未配置的耗能房间生成运行时行；持久行优先保留。 */
-  public ensureRuntimeRows(rooms: readonly PowerPanelRoom[]): void {
-    // Prefab 实例中的跨资源组件引用在 Web 构建反序列化后可能失效；
-    // 当前场景树才是持久行的权威来源，不能继续使用已销毁组件对象。
-    const rows = this.getAttachedRoomRows();
-    const existing = new Map(rows.map((row) => [row.roomInstanceId, row]));
-    for (const room of rooms) {
-      if (existing.has(room.roomId)) continue;
-      const row = PowerRoomRow.createRuntime(this.node, room);
-      rows.push(row);
-    }
-    const orderedRoomIds = rooms.map((room) => room.roomId).sort((left, right) => left.localeCompare(right));
-    for (let index = 0; index < orderedRoomIds.length; index += 1) {
-      rows.find((row) => row.roomInstanceId === orderedRoomIds[index])?.node.setPosition(0, 12 - index * 43, 0);
-    }
-    this.roomRows = rows;
+  protected onEnable(): void {
+    // 面板外观由 Creator 中持久化的 Graphics 参数决定，运行时只刷新动态数值。
   }
 
   public bind(
+    shipId: string,
     rooms: readonly PowerPanelRoom[],
     state: PowerPanelState,
     dispatch: PowerCommandHandler,
   ): void {
+    if (shipId.trim() === '' || state.shipId !== shipId) {
+      error('[UI] 能源面板绑定的飞船实例不一致');
+      return;
+    }
     this.dispatch = dispatch;
     this.roomRows = this.getAttachedRoomRows();
     const roomsById = new Map(rooms.map((room) => [room.roomId, room]));
+    const missingRows = rooms.filter((room) => !this.roomRows.some((row) => row.roomInstanceId === room.roomId));
+    if (missingRows.length > 0) {
+      const message = `能源面板缺少持久房间行：${missingRows.map((room) => room.displayName).join('、')}`;
+      error(`[UI] ${message}`);
+      if (this.statusLabel !== null) this.statusLabel.string = message;
+      return;
+    }
     for (const row of this.roomRows) {
       const room = roomsById.get(row.roomInstanceId);
       if (room === undefined) continue;
@@ -146,7 +135,6 @@ export class PowerPanel extends Component {
     const allocated = state.allocatedPower;
     if (this.summaryLabel !== null) this.summaryLabel.string = `能源：${allocated} / ${available}`;
     if (this.progressBar !== null) this.progressBar.progress = available <= 0 ? 0 : Math.min(1, allocated / available);
-    this.drawChrome();
     const powers = new Map(state.allocations.map((allocation) => [allocation.roomId, allocation.power]));
     for (const row of this.roomRows) {
       const power = powers.get(row.roomInstanceId);
@@ -154,9 +142,9 @@ export class PowerPanel extends Component {
     }
   }
 
-  private handleCommand = (command: EnergyCommand): void => {
+  private handleCommand = async (command: EnergyCommand): Promise<void> => {
     if (this.dispatch === null) return;
-    const result = this.dispatch(command);
+    const result = await this.dispatch(command);
     this.refresh(result.state);
     if (this.statusLabel !== null) this.statusLabel.string = result.message;
   };
@@ -169,23 +157,12 @@ export class PowerPanel extends Component {
     return this.node.getComponentsInChildren(PowerRoomRow).filter((row) => row.node !== null);
   }
 
-  private synchronizeUiRootSize(): void {
-    const canvasTransform = this.node.scene?.getComponentInChildren(UITransform) ?? null;
-    const canvasSize = canvasTransform?.contentSize;
-    if (canvasSize === undefined) return;
-    let cursor = this.node.parent;
-    for (let depth = 0; cursor !== null && depth < 2; depth += 1) {
-      const transform = cursor.getComponent(UITransform);
-      if (transform !== null) {
-        transform.setContentSize(canvasSize);
-        transform.anchorPoint.set(0.5, 0.5);
-      }
-      cursor = cursor.parent;
-    }
-  }
-
   private drawChrome(): void {
-    const panelGraphics = this.getComponent(Graphics) ?? this.addComponent(Graphics);
+    const panelGraphics = this.getComponent(Graphics);
+    if (panelGraphics === null) {
+      error('[UI] 请在能源面板 Prefab 根节点持久挂载图形组件');
+      return;
+    }
     panelGraphics.clear();
     panelGraphics.fillColor = new Color(7, 22, 35, 238);
     panelGraphics.roundRect(-160, -110, 320, 220, 10);
@@ -212,18 +189,23 @@ export class PowerPanel extends Component {
   }
 }
 
-function ensurePanelLabel(parent: Node, name: string, text: string, x: number, y: number, fontSize: number): Label {
-  const node = parent.getChildByName(name) ?? new Node(name);
-  if (node.parent === null) parent.addChild(node);
-  node.setPosition(x, y, 0);
-  const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-  transform.setContentSize(288, 28);
+function ensurePanelLabel(parent: Node, name: string, text: string, y: number, fontSize: number): Label {
+  const existing = parent.getChildByName(name);
+  const node = existing ?? new Node(name);
+  if (existing === null) {
+    parent.addChild(node);
+    node.setPosition(0, y, 0);
+    node.addComponent(UITransform).setContentSize(288, 28);
+  }
+  node.layer = Layers.Enum.UI_2D;
   const label = node.getComponent(Label) ?? node.addComponent(Label);
-  label.string = text;
-  label.fontSize = fontSize;
-  label.lineHeight = 24;
-  label.horizontalAlign = HorizontalTextAlignment.CENTER;
-  label.verticalAlign = VerticalTextAlignment.CENTER;
-  label.color = new Color(230, 240, 248, 255);
+  if (existing === null) {
+    label.string = text;
+    label.fontSize = fontSize;
+    label.lineHeight = 24;
+    label.horizontalAlign = HorizontalTextAlignment.CENTER;
+    label.verticalAlign = VerticalTextAlignment.CENTER;
+    label.color = new Color(230, 240, 248, 255);
+  }
   return label;
 }

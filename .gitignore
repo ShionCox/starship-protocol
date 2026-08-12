@@ -8,13 +8,7 @@ temp/
 local/
 build/
 profiles/
-native
-!native/
-native/*
-!native/launcher/
-!native/launcher/**
-!native/security-config/
-!native/security-config/**
+native/
 
 # 生产密钥、签名证书和本地安全发布产物不得进入仓库。
 *.pem
@@ -35,6 +29,7 @@ pnpm-debug.log*
 .npm/
 coverage/
 *.tsbuildinfo
+extensions/starship-editor-tools/dist/
 
 # 本地环境变量和临时密钥
 .env

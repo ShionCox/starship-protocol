@@ -4,7 +4,6 @@ import {
   Component,
   EventMouse,
   Graphics,
-  HorizontalTextAlignment,
   JsonAsset,
   Label,
   Node,
@@ -12,12 +11,11 @@ import {
   tween,
   UITransform,
   Vec3,
-  VerticalTextAlignment,
   warn,
 } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 
-import { PrototypeSceneSettings } from '../bootstrap/PrototypeSceneSettings';
+import { findOwningShipView, ShipView } from './ShipView';
 import {
   parseCrewDefinition,
   type CrewDefinition,
@@ -38,7 +36,7 @@ export type CrewSelectHandler = (crewInstanceId: string) => void;
 @menu('星舰协议/场景表现/船员视图')
 export class CrewView extends Component {
   @property({ displayName: '船员实例标识', tooltip: '场景内唯一的稳定船员实例 ID。', group: '船员实例' })
-  public crewInstanceId = 'crew-engineer-1';
+  public crewInstanceId = '';
 
   @property({ displayName: '船员定义标识', tooltip: '必须与船员定义 JSON 中的稳定 ID 一致。', group: '船员定义' })
   public crewDefinitionId = 'crew-engineer';
@@ -47,7 +45,7 @@ export class CrewView extends Component {
   public definitionAsset: JsonAsset | null = null;
 
   @property({ displayName: '初始房间实例标识', tooltip: '空存档时船员所在的房间实例 ID。', group: '初始站位' })
-  public initialRoomInstanceId = 'room-reactor-1';
+  public initialRoomInstanceId = '';
 
   @property({ displayName: '初始站位编号', tooltip: '从 0 开始；必须小于目标房间的船员容量。', group: '初始站位', min: 0, step: 1 })
   public initialStationIndex = 0;
@@ -64,10 +62,13 @@ export class CrewView extends Component {
   @property({ displayName: '船员标记直径', tooltip: '船员圆形标记的像素直径。', group: '外观', min: 16, step: 1 })
   public markerDiameter = 34;
 
+  @property({ displayName: '移动插值时长', tooltip: '每个固定 Tick 之间的画面平滑时长；只影响表现，不改变 GameCore 移动速度。', group: '移动表现', min: 0.02, max: 0.2, step: 0.01 })
+  public movementTweenSeconds = 0.1;
+
   private definition: Readonly<CrewDefinition> | null = null;
   private state: CrewReadState | null = null;
   private navigation: NavigationGraph | null = null;
-  private sceneSettings: PrototypeSceneSettings | null = null;
+  private shipView: ShipView | null = null;
   private selectHandler: CrewSelectHandler | null = null;
   private selected = false;
   private previewSignature = '';
@@ -108,42 +109,22 @@ export class CrewView extends Component {
   public applyEditorInitialPlacement(): boolean {
     const validation = this.validateInitialPlacement();
     if (validation.ok === false || validation.roomView === undefined || validation.roomDefinition === undefined) return false;
-    const scene = this.node.scene;
     const parent = this.node.parent;
-    const sceneSettings = scene?.getComponentInChildren(PrototypeSceneSettings) ?? null;
+    const shipView = findOwningShipView(this.node);
     const roomView = validation.roomView;
     const roomState = roomView.getAuthoringInspectorState();
-    if (parent === null || sceneSettings === null || roomState.ok !== true || roomState.gridPosition === undefined) return false;
-    const center = sceneSettings.gridPositionToParentLocal(
+    if (parent === null || shipView === null || roomState.ok !== true || roomState.gridPosition === undefined) return false;
+    const center = shipView.gridPositionToParentLocal(
       parent,
       roomState.gridPosition,
       validation.roomDefinition.width,
       validation.roomDefinition.height,
     );
     if (center === null) return false;
-    center.x += (this.initialStationIndex - (validation.roomDefinition.crewCapacity - 1) / 2) * sceneSettings.cellSize * 0.42;
-    center.y -= sceneSettings.cellSize * 0.16;
+    center.x += (this.initialStationIndex - (validation.roomDefinition.crewCapacity - 1) / 2) * shipView.cellSize * 0.42;
+    center.y -= shipView.cellSize * 0.16;
     center.z = 20;
     this.node.setPosition(center);
-    return true;
-  }
-
-  /** 供创作插件创建模板时调用，所有生成内容仍需由 Creator 保存为 Prefab。 */
-  public ensureAuthoringStructure(): boolean {
-    this.getComponent(UITransform) ?? this.addComponent(UITransform);
-    this.getComponent(Graphics) ?? this.addComponent(Graphics);
-    const labelNode = this.node.getChildByName('船员名称') ?? new Node('船员名称');
-    if (labelNode.parent === null) this.node.addChild(labelNode);
-    labelNode.setPosition(0, -28, 0);
-    const transform = labelNode.getComponent(UITransform) ?? labelNode.addComponent(UITransform);
-    transform.setContentSize(110, 24);
-    const label = labelNode.getComponent(Label) ?? labelNode.addComponent(Label);
-    label.fontSize = 13;
-    label.lineHeight = 18;
-    label.horizontalAlign = HorizontalTextAlignment.CENTER;
-    label.verticalAlign = VerticalTextAlignment.CENTER;
-    label.color = new Color(235, 244, 248, 255);
-    this.draw();
     return true;
   }
 
@@ -191,11 +172,12 @@ export class CrewView extends Component {
     if (roomInstanceId === '') {
       return { ok: false, message: '船员初始房间标识不能为空' };
     }
-    const scene = this.node.scene;
-    if (scene === null) {
+    const shipView = findOwningShipView(this.node);
+    if (shipView?.roomRoot === null || shipView?.roomRoot === undefined) {
       return { ok: false, message: `船员初始房间不存在：${roomInstanceId}` };
     }
-    const roomView = scene.getComponentsInChildren(RoomView).find((view) => view.roomInstanceId.trim() === roomInstanceId);
+    const roomView = shipView.roomRoot.getComponentsInChildren(RoomView)
+      .find((view) => view.roomInstanceId.trim() === roomInstanceId);
     if (roomView === undefined) {
       return { ok: false, message: `船员初始房间不存在：${roomInstanceId}` };
     }
@@ -224,14 +206,13 @@ export class CrewView extends Component {
     definition: Readonly<CrewDefinition>,
     state: CrewReadState,
     navigation: NavigationGraph,
-    sceneSettings: PrototypeSceneSettings,
+    shipView: ShipView,
     selectHandler: CrewSelectHandler,
   ): void {
     this.definition = definition;
     this.navigation = navigation;
-    this.sceneSettings = sceneSettings;
+    this.shipView = shipView;
     this.selectHandler = selectHandler;
-    this.refresh(state, false);
   }
 
   public setNavigation(navigation: NavigationGraph): void {
@@ -255,7 +236,7 @@ export class CrewView extends Component {
         : Vec3.lerp(new Vec3(), current, next, Math.min(1, Math.max(0, state.edgeProgress)));
     if (target !== null) {
       Tween.stopAllByTarget(this.node);
-      if (animate && !EDITOR_NOT_IN_PREVIEW) tween(this.node).to(0.1, { position: target }).start();
+      if (animate && !EDITOR_NOT_IN_PREVIEW) tween(this.node).to(this.movementTweenSeconds, { position: target }).start();
       else this.node.setPosition(target);
     }
     const label = this.node.getChildByName('船员名称')?.getComponent(Label) ?? null;
@@ -273,15 +254,15 @@ export class CrewView extends Component {
     const parent = this.node.parent;
     const navigationNode = this.navigation?.getNode(nodeId) ?? null;
     const placement = navigationNode === null ? null : this.navigation?.getRoomPlacement(navigationNode.roomId) ?? null;
-    if (parent === null || navigationNode === null || placement === null || this.sceneSettings === null) return null;
-    const center = this.sceneSettings.gridPositionToParentLocal(parent, placement, placement.width, placement.height);
+    if (parent === null || navigationNode === null || placement === null || this.shipView === null) return null;
+    const center = this.shipView.gridPositionToParentLocal(parent, placement, placement.width, placement.height);
     if (center === null) return null;
     if (navigationNode.kind === 'STATION') {
       const count = this.navigation?.getRoomStationCount(navigationNode.roomId) ?? 1;
-      center.x += ((navigationNode.stationIndex ?? 0) - (count - 1) / 2) * this.sceneSettings.cellSize * 0.42;
-      center.y -= this.sceneSettings.cellSize * 0.16;
+      center.x += ((navigationNode.stationIndex ?? 0) - (count - 1) / 2) * this.shipView.cellSize * 0.42;
+      center.y -= this.shipView.cellSize * 0.16;
     } else {
-      center.y += this.sceneSettings.cellSize * 0.2;
+      center.y += this.shipView.cellSize * 0.2;
     }
     center.z = 20;
     return center;

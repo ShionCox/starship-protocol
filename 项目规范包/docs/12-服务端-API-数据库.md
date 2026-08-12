@@ -6,11 +6,13 @@
 
 > 客户端只发请求与 Command；服务端是联网数据和奖励的最终权威。
 
+> **当前状态**：R1 只冻结契约和权威规则，仓库不实现服务器进程。FastAPI、MySQL、Redis 和 Node Battle Service 必须等本地战斗闭环完成后按真实部署条件开发。
+
 # 30. 服务端架构
 
 ## 30.1 FastAPI
 
-负责：Auth、Player、Ship、Layout、Crew、Inventory、Equipment、Research、Mission、Mail、Shop、Matchmaking、Ranking、Config、Battle Orchestration、Replay Metadata、GM。
+未来第一版采用一个 FastAPI 单体，先负责 Auth、玩家 Bootstrap、玩家 Command、配置版本和 PvE 编排。库存、任务、邮件、商店、排行和 GM 只有进入真实需求时才增加，不提前拆微服务。
 
 ## 30.2 Battle Service
 
@@ -22,7 +24,7 @@ Node.js + TypeScript。
 
 ## 30.3 Redis
 
-用途：Session、Config Cache、Distributed Lock、Rate Limit、Match Queue、Ranking、Battle Job Queue、Online Presence、Idempotency Key。
+Redis 只在真实需要时用于 Session、Rate Limit、短期幂等和战斗队列。玩家权威状态与经济流水不能只放 Redis。
 
 ---
 
@@ -36,60 +38,21 @@ Node.js + TypeScript。
 POST /api/v1/auth/guest
 POST /api/v1/auth/login
 POST /api/v1/auth/refresh
-POST /api/v1/auth/logout
-```
-
-## Client Release Security
-
-```text
-GET  /api/v1/client/manifests/latest
-POST /api/v1/client/launch-ticket
-GET  /api/v1/client/bootstrap
-```
-
-- `manifests/latest` 返回发布流水线生成的签名清单原始字节，不由请求参数拼装清单。
-- `launch-ticket` 只接受当前支持的 `buildId + manifestSha256 + installId`，签发 90 秒级短时凭证；服务端明确拒绝时客户端不得降级离线绕过。
-- `bootstrap` 同时验证 Launch Ticket 和玩家 Session，返回与当前 Build 匹配的加密配置描述和短时内容密钥。
-- 上述接口必须使用 HTTPS、`Cache-Control: no-store`、Redis Rate Limit、可观察审计日志和密钥轮换；不得在日志中打印 Ticket、Session 或内容密钥。
-
-## Player
-
-```text
-GET /api/v1/player/me
-GET /api/v1/player/resources
-```
-
-## Ship
-
-```text
-GET  /api/v1/ships/current
-PUT  /api/v1/ships/current/layout
-POST /api/v1/ships/current/rooms/build
-POST /api/v1/ships/current/rooms/upgrade
-POST /api/v1/ships/current/rooms/remove
-```
-
-## Crew
-
-```text
-GET  /api/v1/crew
-GET  /api/v1/crew/{id}
-PUT  /api/v1/crew/{id}/assignment
-PUT  /api/v1/crew/{id}/ai
-POST /api/v1/crew/{id}/equip
+GET  /api/v1/player/bootstrap
+POST /api/v1/player/commands
 ```
 
 ## Battle
 
 ```text
 POST /api/v1/battles/pve
-POST /api/v1/battles/pvp/match
-POST /api/v1/battles/pvp/start
 GET  /api/v1/battles/{id}
 GET  /api/v1/battles/{id}/replay
 ```
 
 所有路径最终以实际接口设计文档为准。
+
+玩家 Command 请求必须携带 `requestId`、`idempotencyKey`、`expectedRevision` 和 `configVersion`；首版响应固定携带 `serverTime`、权威 `revision`、完整 State、Event 与稳定错误码，不提前支持 Delta。客户端重试同一动作时复用同一幂等键。
 
 ---
 
@@ -97,44 +60,21 @@ GET  /api/v1/battles/{id}/replay
 
 # 32. 数据库核心表
 
-建议逻辑实体：
+第一版只建立必要聚合：
 
 ```text
 users
 player_profiles
+player_saves
 player_resources
 resource_ledger
-
-ship_definitions
-player_ships
-ship_layouts
-player_rooms
-
-crew_definitions
-player_crew
-crew_ai_rule_sets
-
-equipment_definitions
-player_equipment
-inventory_items
-
-research_definitions
-player_research
-
-mission_definitions
-player_missions
-
-battle_records
-battle_participants
-battle_replay_refs
-
-mail
-mail_rewards
-
+idempotency_records
 config_versions
+battle_records
+battle_replay_refs
 ```
 
-原则：Definition 配置可不全部存在 MySQL，可使用 JSON 配置 + 后台发布；PlayerInstance 数据必须持久化；货币必须有 ledger。
+房间、船员和布局初期保存在版本化 `player_saves` JSON 聚合中；没有实际查询/运营需求前不拆几十张实例表。资源余额独立保存，每次经济变化必须写 `resource_ledger`。
 
 ---
 
@@ -145,6 +85,17 @@ config_versions
 以下必须事务处理：领奖、升级、制造、购买、邮件领取、战斗结算、市场交易、稀有道具消耗。
 
 必须防止：重复领奖、重放请求、双击购买、并发升级、负库存、负货币。
+
+## 33.1 离线结算
+
+1. 服务端以自身时间读取玩家 `lastSettledAt`，不信任客户端时钟。
+2. 建造、升级和研究计时按完整真实离线时间推进。
+3. 资源生产只计算 `min(serverNow - lastSettledAt, 12 小时)`；超出上限的产出时间丢弃。
+4. 结算后把 `lastSettledAt` 推进到当前服务端时间。
+5. 在同一数据库事务中锁定玩家聚合、计算产出、更新余额、写入 resource_ledger、更新 revision 和幂等记录。
+6. 重复 Bootstrap、重试或并发请求不能重复结算。
+7. `GET /api/v1/player/bootstrap` 在本次请求实际完成离线结算时返回可选的 `OfflineSettlementSummary`；客户端只显示该已入账摘要，不能提交资源数量。
+8. 离线期间不执行战斗、任务胜负、船员移动、AI 或随机掉落。
 
 ---
 

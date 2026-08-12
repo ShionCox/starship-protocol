@@ -6,3 +6,6 @@ export const ROOM_CATALOG_CHANGE_MESSAGE = `${PACKAGE_NAME}:room-catalog-change`
 export const CREW_CONFIG_DIRECTORY = 'db://assets/config/crew';
 export const DEFAULT_CREW_TEMPLATE_URL = 'db://assets/prefabs/CrewMember.prefab';
 export const CREW_CATALOG_CHANGE_MESSAGE = `${PACKAGE_NAME}:crew-catalog-change`;
+export const HULL_CONFIG_DIRECTORY = 'db://assets/config/hulls';
+export const HULL_CATALOG_CHANGE_MESSAGE = `${PACKAGE_NAME}:hull-catalog-change`;
+export const DEFAULT_SHIP_VIEW_PREFAB_URL = 'db://assets/prefabs/ShipView.prefab';

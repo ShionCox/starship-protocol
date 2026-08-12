@@ -39,7 +39,7 @@
 - 每帧执行所有 AI；
 - 使用 Cocos Node 作为核心状态。
 
-必须：Object Pool、SpriteAtlas、VirtualList、Event-driven UI、Asset Bundle、资源释放、逻辑/渲染分离。
+按对应内容规模启用：高频对象使用 Object Pool，大型列表使用 VirtualList，图像批量后使用 SpriteAtlas，自定义 Asset Bundle 在动态资源或包体需要分包时启用。当前 R1 Web Desktop 使用内置 `main` Bundle、战斗场景预加载与场景资源自动释放；所有阶段始终要求事件驱动 UI 和逻辑/渲染分离。
 
 ---
 

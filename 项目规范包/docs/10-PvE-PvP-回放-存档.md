@@ -94,11 +94,26 @@ R1 至少实现：播放、暂停、1x/2x、重新播放。
 
 ## 28.1 本地阶段
 
-R0/R1 使用 localStorage，只存设置、原型布局、调试数据。
+R1 开发期通过 `PlayerStatePort` 使用一个玩家状态 Envelope；UI、View 和 GameCore 不直接访问 localStorage。
+
+```ts
+interface PlayerStateEnvelope {
+  readonly schemaVersion: 1;
+  readonly configVersion: string;
+  readonly revision: number;
+  readonly savedAtUnixMs: number;
+  readonly activeShipId: string;
+  readonly ships: readonly ShipSnapshot[];
+}
+```
+
+浏览器适配器只使用 `starship-protocol:dev:player-state:v1`。每次合法 Command 或需要持久的固定 Tick 保存完整 Envelope；写入失败恢复操作前状态。损坏或不兼容数据输出中文警告并回到默认开发状态。
+
+旧 `starship-protocol:r0:ship-layout`、`starship-protocol:r1:energy`、`starship-protocol:r1:crew` 不读取、不迁移，开发数据直接废弃。
 
 ## 28.2 联网阶段
 
-R2 服务端为唯一权威存档，客户端本地只做 cache。客户端缓存即使被删除、替换或解密，也不能直接改变服务端账号、库存、奖励或战斗结果。
+R2 服务端为唯一权威存档，HTTP 适配器保持与本地 `PlayerStatePort` 相同的应用层结果结构；客户端本地只做 cache。缓存被删除、替换或解密不能改变服务端账号、库存、奖励或战斗结果。
 
 ## 28.3 存档版本
 
@@ -110,6 +125,6 @@ R2 服务端为唯一权威存档，客户端本地只做 cache。客户端缓�
 }
 ```
 
-必须准备 Migration。
+正式数据必须准备显式 Migration。当前旧 Prototype 开发 Key 已明确废弃，不为它们增加迁移代码。
 
 ---

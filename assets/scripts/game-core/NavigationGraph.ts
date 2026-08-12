@@ -29,30 +29,31 @@ export class NavigationGraph {
     placements: readonly RoomPlacement[],
     definitionsByRoomId: ReadonlyMap<string, Readonly<RoomDefinition>>,
   ) {
-    const sorted = [...placements].sort((left, right) => left.id.localeCompare(right.id));
+    const sorted = [...placements].sort((left, right) => left.instanceId.localeCompare(right.instanceId));
     if (sorted.length !== definitionsByRoomId.size) {
       throw new RangeError('导航图房间布局与定义数量不一致');
     }
 
     const mutableNeighbors = new Map<string, Set<string>>();
     for (const placement of sorted) {
-      const definition = definitionsByRoomId.get(placement.id);
-      if (definition === undefined) throw new RangeError(`导航图缺少房间定义：${placement.id}`);
-      if (this.roomPlacements.has(placement.id)) throw new RangeError(`导航图房间 ID 重复：${placement.id}`);
+      const definition = definitionsByRoomId.get(placement.instanceId);
+      if (definition === undefined) throw new RangeError(`导航图缺少房间定义：${placement.instanceId}`);
+      if (definition.id !== placement.definitionId) throw new RangeError(`导航图房间定义不匹配：${placement.instanceId}`);
+      if (this.roomPlacements.has(placement.instanceId)) throw new RangeError(`导航图房间 ID 重复：${placement.instanceId}`);
       if (placement.width !== definition.width || placement.height !== definition.height) {
-        throw new RangeError(`导航图房间尺寸不匹配：${placement.id}`);
+        throw new RangeError(`导航图房间尺寸不匹配：${placement.instanceId}`);
       }
-      this.roomPlacements.set(placement.id, { ...placement });
-      this.addNode({ id: exitNodeId(placement.id), roomId: placement.id, kind: 'EXIT' }, mutableNeighbors);
+      this.roomPlacements.set(placement.instanceId, { ...placement });
+      this.addNode({ id: exitNodeId(placement.instanceId), roomId: placement.instanceId, kind: 'EXIT' }, mutableNeighbors);
       for (let stationIndex = 0; stationIndex < definition.crewCapacity; stationIndex += 1) {
         const station: NavigationNode = {
-          id: stationNodeId(placement.id, stationIndex),
-          roomId: placement.id,
+          id: stationNodeId(placement.instanceId, stationIndex),
+          roomId: placement.instanceId,
           kind: 'STATION',
           stationIndex,
         };
         this.addNode(station, mutableNeighbors);
-        connect(mutableNeighbors, station.id, exitNodeId(placement.id));
+        connect(mutableNeighbors, station.id, exitNodeId(placement.instanceId));
       }
     }
 
@@ -60,7 +61,7 @@ export class NavigationGraph {
       for (let rightIndex = leftIndex + 1; rightIndex < sorted.length; rightIndex += 1) {
         const left = sorted[leftIndex];
         const right = sorted[rightIndex];
-        if (shareSide(left, right)) connect(mutableNeighbors, exitNodeId(left.id), exitNodeId(right.id));
+        if (shareSide(left, right)) connect(mutableNeighbors, exitNodeId(left.instanceId), exitNodeId(right.instanceId));
       }
     }
 
@@ -68,7 +69,7 @@ export class NavigationGraph {
       this.neighbors.set(nodeId, Object.freeze(Array.from(values).sort((left, right) => left.localeCompare(right))));
     }
     this.version = sorted
-      .map((room) => `${room.id}:${room.x},${room.y},${room.width},${room.height}:${definitionsByRoomId.get(room.id)?.crewCapacity ?? -1}`)
+      .map((room) => `${room.instanceId}:${room.definitionId}:${room.x},${room.y},${room.width},${room.height}:${definitionsByRoomId.get(room.instanceId)?.crewCapacity ?? -1}`)
       .join('|');
   }
 

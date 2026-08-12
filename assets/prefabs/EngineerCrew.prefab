@@ -311,13 +311,13 @@
     "__prefab": {
       "__id__": 13
     },
-    "crewInstanceId": "crew-engineer-1",
+    "crewInstanceId": "",
     "crewDefinitionId": "crew-engineer",
     "definitionAsset": {
       "__uuid__": "1c9e3604-ff84-4de9-8039-50a9070b3d46",
       "__expectedType__": "cc.JsonAsset"
     },
-    "initialRoomInstanceId": "room-reactor-1",
+    "initialRoomInstanceId": "",
     "initialStationIndex": 0,
     "bodyColor": {
       "__type__": "cc.Color",

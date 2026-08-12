@@ -2,13 +2,15 @@ import {
   _decorator,
   Color,
   Component,
+  error,
   Graphics,
-  HorizontalTextAlignment,
   Label,
+  Layers,
   Node,
   UITransform,
-  VerticalTextAlignment,
   Widget,
+  HorizontalTextAlignment,
+  VerticalTextAlignment,
 } from 'cc';
 
 import { CREW_ROLE_LABELS } from '../game-core/CrewDefinition';
@@ -35,35 +37,40 @@ export class CrewStatusPanel extends Component {
   @property({ type: Label, displayName: '状态提示', tooltip: '显示移动成功、房间已满或存档错误等中文反馈。', group: '显示' })
   public statusLabel: Label | null = null;
 
-  public static createRuntimeFallback(parent: Node): CrewStatusPanel {
-    const node = new Node('船员状态面板');
-    parent.addChild(node);
-    node.addComponent(UITransform);
-    const panel = node.addComponent(CrewStatusPanel);
-    panel.ensureAuthoringStructure();
-    return panel;
-  }
+  private shipId = '';
 
-  /** 供创作插件创建可持久保存的面板层级。 */
-  public ensureAuthoringStructure(): boolean {
-    const transform = this.getComponent(UITransform) ?? this.addComponent(UITransform);
-    transform.setContentSize(320, 184);
-    const widget = this.getComponent(Widget) ?? this.addComponent(Widget);
-    widget.isAlignRight = true;
-    widget.isAlignBottom = true;
-    widget.right = 16;
-    widget.bottom = 16;
-    this.selectionLabel = ensureLabel(this.node, '当前选择', '当前选择：无', 67);
-    this.currentRoomLabel = ensureLabel(this.node, '所在房间', '所在房间：无', 36);
-    this.targetRoomLabel = ensureLabel(this.node, '目标房间', '目标房间：无', 5);
-    this.stateLabel = ensureLabel(this.node, '船员状态', '状态：空闲', -26);
-    this.statusLabel = ensureLabel(this.node, '状态提示', '请点击船员，再点击目标房间', -67, 12);
-    this.drawChrome();
+  /** 仅供创作插件补齐共享 UIRoot Prefab 中的持久船员状态面板。 */
+  public ensureAuthoringPrefabStructure(): boolean {
+    this.node.layer = Layers.Enum.UI_2D;
+    const existingTransform = this.getComponent(UITransform);
+    if (existingTransform === null) this.addComponent(UITransform).setContentSize(320, 184);
+    if (this.getComponent(Widget) === null) {
+      const widget = this.addComponent(Widget);
+      widget.isAlignRight = true;
+      widget.isAlignBottom = true;
+      widget.right = 16;
+      widget.bottom = 16;
+    }
+    this.getComponent(Graphics) ?? this.addComponent(Graphics);
+    this.selectionLabel = ensureStatusLabel(this.node, '当前选择', '当前选择：无', 67);
+    this.currentRoomLabel = ensureStatusLabel(this.node, '所在房间', '所在房间：无', 36);
+    this.targetRoomLabel = ensureStatusLabel(this.node, '目标房间', '目标房间：无', 5);
+    this.stateLabel = ensureStatusLabel(this.node, '船员状态', '状态：空闲', -26);
+    this.statusLabel = ensureStatusLabel(this.node, '状态提示', '请点击船员，再点击目标房间', -67, 12);
+    if (existingTransform === null) this.drawChrome();
     return true;
   }
 
   protected onEnable(): void {
-    this.drawChrome();
+    // 面板外观由 Creator 中持久化的 Graphics 参数决定。
+  }
+
+  public bind(shipId: string): void {
+    if (shipId.trim() === '') {
+      error('[UI] 船员状态面板绑定的飞船实例标识不能为空');
+      return;
+    }
+    this.shipId = shipId;
   }
 
   public refresh(selected: CrewReadState | null, message = ''): void {
@@ -79,7 +86,11 @@ export class CrewStatusPanel extends Component {
   }
 
   private drawChrome(): void {
-    const graphics = this.getComponent(Graphics) ?? this.addComponent(Graphics);
+    const graphics = this.getComponent(Graphics);
+    if (graphics === null) {
+      error('[UI] 请在船员状态面板 Prefab 根节点持久挂载图形组件');
+      return;
+    }
     graphics.clear();
     graphics.fillColor = new Color(7, 22, 35, 238);
     graphics.roundRect(-160, -92, 320, 184, 10);
@@ -91,18 +102,23 @@ export class CrewStatusPanel extends Component {
   }
 }
 
-function ensureLabel(parent: Node, name: string, text: string, y: number, fontSize = 14): Label {
-  const node = parent.getChildByName(name) ?? new Node(name);
-  if (node.parent === null) parent.addChild(node);
-  node.setPosition(0, y, 0);
-  const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-  transform.setContentSize(288, 26);
+function ensureStatusLabel(parent: Node, name: string, text: string, y: number, fontSize = 14): Label {
+  const existing = parent.getChildByName(name);
+  const node = existing ?? new Node(name);
+  if (existing === null) {
+    parent.addChild(node);
+    node.setPosition(0, y, 0);
+    node.addComponent(UITransform).setContentSize(288, 26);
+  }
+  node.layer = Layers.Enum.UI_2D;
   const label = node.getComponent(Label) ?? node.addComponent(Label);
-  label.string = text;
-  label.fontSize = fontSize;
-  label.lineHeight = 22;
-  label.horizontalAlign = HorizontalTextAlignment.LEFT;
-  label.verticalAlign = VerticalTextAlignment.CENTER;
-  label.color = new Color(230, 240, 248, 255);
+  if (existing === null) {
+    label.string = text;
+    label.fontSize = fontSize;
+    label.lineHeight = 22;
+    label.horizontalAlign = HorizontalTextAlignment.LEFT;
+    label.verticalAlign = VerticalTextAlignment.CENTER;
+    label.color = new Color(230, 240, 248, 255);
+  }
   return label;
 }

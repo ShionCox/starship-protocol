@@ -96,26 +96,26 @@
       "update-crew-definition": {
         "methods": ["updateCrewDefinition"]
       },
-      "update-scene-core-settings": {
-        "methods": ["updateSceneCoreSettings"]
+      "create-hull-definition": {
+        "methods": ["createHullDefinition"]
       },
-      "initialize-prototype-scene": {
-        "methods": ["initializePrototypeScene"]
+      "update-hull-definition": {
+        "methods": ["updateHullDefinition"]
       },
-      "configure-r1-energy-scene": {
-        "methods": ["configureR1EnergyScene"]
+      "create-ship-instance": {
+        "methods": ["createShipInstance"]
       },
-      "configure-r1-crew-scene": {
-        "methods": ["configureR1CrewScene"]
+      "initialize-scene-skeleton": {
+        "methods": ["initializeSceneSkeleton"]
       },
-      "create-crew-member-template": {
-        "methods": ["createCrewMemberTemplate"]
+      "create-foundation-prefabs": {
+        "methods": ["createFoundationPrefabs"]
       },
-      "create-power-room-row-template": {
-        "methods": ["createPowerRoomRowTemplate"]
+      "mount-shared-ui": {
+        "methods": ["mountSharedUi"]
       },
-      "replace-power-rows-with-prefab": {
-        "methods": ["replacePowerRowsWithPrefab"]
+      "wire-scene-foundation": {
+        "methods": ["wireSceneFoundation"]
       }
     }
   }

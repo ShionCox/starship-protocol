@@ -4,10 +4,11 @@ import {
   Color,
   Component,
   Graphics,
-  HorizontalTextAlignment,
   Label,
+  Layers,
   Node,
   UITransform,
+  HorizontalTextAlignment,
   VerticalTextAlignment,
 } from 'cc';
 
@@ -16,12 +17,12 @@ import type { PowerPanelRoom } from './PowerPanel';
 
 const { ccclass, menu, property } = _decorator;
 
-/** 单个耗能房间的可见能源控制行；规则仍由 Bootstrap 注入的 Command Handler 执行。 */
+/** 单个耗能房间的可见能源控制行；规则由场景装配注入的 Command Handler 执行。 */
 @ccclass('PowerRoomRow')
 @menu('星舰协议/界面/能源房间行')
 export class PowerRoomRow extends Component {
   @property({ displayName: '房间实例标识', tooltip: '必须与房间视图组件的稳定实例标识一致。', group: '房间' })
-  public roomInstanceId = 'room-laser-1';
+  public roomInstanceId = '';
 
   @property({ type: Label, displayName: '房间名称', tooltip: '显示对应房间定义中的中文名称。', group: '显示' })
   public roomNameLabel: Label | null = null;
@@ -42,53 +43,21 @@ export class PowerRoomRow extends Component {
   private power = 0;
   private dispatch: ((command: EnergyCommand) => void) | null = null;
 
-  /**
-   * Web 原型缺少持久化行节点时的最小运行时兜底；正式场景仍应由 Creator 保存 Prefab 实例。
-   * 兜底只创建 Cocos UI 表现，不把任何能源规则放进 View。
-   */
-  public static createRuntime(parent: Node, room: PowerPanelRoom): PowerRoomRow {
-    return PowerRoomRow.ensureAuthoringStructure(parent, room.roomId, room.displayName);
-  }
-
-  /** 创建或复用可由 Creator 保存的能源行结构；规则数值仍由运行时 bind 注入。 */
-  public static ensureAuthoringStructure(parent: Node, roomInstanceId: string, displayName: string): PowerRoomRow {
-    const existing = parent.children
-      .map((child) => child.getComponent(PowerRoomRow))
-      .find((row) => row?.roomInstanceId === roomInstanceId);
-    const rowNode = existing?.node ?? new Node(`能源行-${displayName}`);
-    if (rowNode.parent === null) parent.addChild(rowNode);
-    const rowTransform = rowNode.getComponent(UITransform) ?? rowNode.addComponent(UITransform);
-    rowTransform.setContentSize(288, 38);
-
-    const row = existing ?? rowNode.addComponent(PowerRoomRow);
-    row.roomInstanceId = roomInstanceId;
-    row.roomNameLabel = ensureLabel(rowNode, '房间名称', displayName, -92, 0, 14, 112);
-    row.powerLabel = ensureLabel(rowNode, '当前能源', '0 / 6', 8, 0, 13, 72);
-    row.decreaseButton = ensureButton(rowNode, '减少按钮', '−', 76, 0);
-    row.increaseButton = ensureButton(rowNode, '增加按钮', '+', 106, 0);
-    row.resetButton = ensureButton(rowNode, '断电按钮', '断电', 148, 0, 48);
-    row.registerEvents();
-    return row;
-  }
-
-  /** 供创作插件把当前 Prefab 根节点补齐为可复用能源行模板。 */
+  /** 仅供创作插件补齐可持久保存的能源行 Prefab，不作为运行时兜底。 */
   public ensureAuthoringPrefabStructure(roomInstanceId: string, displayName: string): boolean {
+    this.node.layer = Layers.Enum.UI_2D;
     this.roomInstanceId = roomInstanceId;
-    const transform = this.getComponent(UITransform) ?? this.addComponent(UITransform);
-    transform.setContentSize(288, 38);
-    this.roomNameLabel = ensureLabel(this.node, '房间名称', displayName, -92, 0, 14, 112);
-    this.powerLabel = ensureLabel(this.node, '当前能源', '0 / 6', 8, 0, 13, 72);
-    this.decreaseButton = ensureButton(this.node, '减少按钮', '−', 76, 0);
-    this.increaseButton = ensureButton(this.node, '增加按钮', '+', 106, 0);
-    this.resetButton = ensureButton(this.node, '断电按钮', '断电', 148, 0, 48);
+    if (this.getComponent(UITransform) === null) this.addComponent(UITransform).setContentSize(288, 38);
+    this.roomNameLabel = ensureLabel(this.node, '房间名称', displayName, -92, 112);
+    this.powerLabel = ensureLabel(this.node, '当前能源', '0 / 6', 8, 72);
+    this.decreaseButton = ensureButton(this.node, '减少按钮', '−', 76, 30);
+    this.increaseButton = ensureButton(this.node, '增加按钮', '+', 106, 30);
+    this.resetButton = ensureButton(this.node, '断电按钮', '断电', 148, 48);
     this.registerEvents();
     return true;
   }
 
-  /**
-   * Creator 的 create-node.position 使用场景坐标；能源行是面板内布局，必须在实例创建后写局部坐标。
-   * 该公开编辑器方法让插件通过 Scene API 调用组件完成换算，避免直接修改场景序列化文本。
-   */
+  /** 仅供创作插件设置 Prefab 实例在能源面板内的局部位置。 */
   public applyAuthoringLocalPosition(x: number, y: number): boolean {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
     this.node.setPosition(x, y, 0);
@@ -192,55 +161,38 @@ export class PowerRoomRow extends Component {
   }
 }
 
-function ensureLabel(
-  parent: Node,
-  name: string,
-  text: string,
-  x: number,
-  y: number,
-  fontSize: number,
-  width: number,
-): Label {
-  const node = parent.getChildByName(name) ?? new Node(name);
-  if (node.parent === null) parent.addChild(node);
-  node.setPosition(x, y, 0);
-  const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-  transform.setContentSize(width, 30);
+function ensureLabel(parent: Node, name: string, text: string, x: number, width: number): Label {
+  const existing = parent.getChildByName(name);
+  const node = existing ?? new Node(name);
+  if (existing === null) {
+    parent.addChild(node);
+    node.setPosition(x, 0, 0);
+    node.addComponent(UITransform).setContentSize(width, 30);
+  }
+  node.layer = Layers.Enum.UI_2D;
   const label = node.getComponent(Label) ?? node.addComponent(Label);
-  label.string = text;
-  label.fontSize = fontSize;
-  label.lineHeight = 24;
-  label.horizontalAlign = HorizontalTextAlignment.CENTER;
-  label.verticalAlign = VerticalTextAlignment.CENTER;
-  label.color = new Color(230, 240, 248, 255);
+  if (existing === null) {
+    label.string = text;
+    label.fontSize = 14;
+    label.lineHeight = 24;
+    label.horizontalAlign = HorizontalTextAlignment.CENTER;
+    label.verticalAlign = VerticalTextAlignment.CENTER;
+    label.color = new Color(230, 240, 248, 255);
+  }
   return label;
 }
 
-function ensureButton(
-  parent: Node,
-  name: string,
-  text: string,
-  x: number,
-  y: number,
-  width = 24,
-): Button {
-  const node = parent.getChildByName(name) ?? new Node(name);
-  if (node.parent === null) parent.addChild(node);
-  node.setPosition(x, y, 0);
-  const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-  transform.setContentSize(width, 28);
+function ensureButton(parent: Node, name: string, text: string, x: number, width: number): Button {
+  const existing = parent.getChildByName(name);
+  const node = existing ?? new Node(name);
+  if (existing === null) {
+    parent.addChild(node);
+    node.setPosition(x, 0, 0);
+    node.addComponent(UITransform).setContentSize(width, 30);
+  }
+  node.layer = Layers.Enum.UI_2D;
   node.getComponent(Graphics) ?? node.addComponent(Graphics);
   const button = node.getComponent(Button) ?? node.addComponent(Button);
-  const labelNode = node.getChildByName('按钮文字') ?? new Node('按钮文字');
-  if (labelNode.parent === null) node.addChild(labelNode);
-  const labelTransform = labelNode.getComponent(UITransform) ?? labelNode.addComponent(UITransform);
-  labelTransform.setContentSize(width, 28);
-  const label = labelNode.getComponent(Label) ?? labelNode.addComponent(Label);
-  label.string = text;
-  label.fontSize = text === '断电' ? 11 : 16;
-  label.lineHeight = 24;
-  label.horizontalAlign = HorizontalTextAlignment.CENTER;
-  label.verticalAlign = VerticalTextAlignment.CENTER;
-  label.color = new Color(240, 248, 255, 255);
+  ensureLabel(node, '文字', text, 0, width);
   return button;
 }

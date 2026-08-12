@@ -1,6 +1,6 @@
 # ADR-0002：Windows 正式发行与服务端版本验证
 
-- 状态：接受
+- 状态：接受（未来 R2 约束；实验实现已于 2026-08-12 移除）
 - 日期：2026-08-09
 - 影响范围：正式客户端平台、构建发布、配置分发、启动器、FastAPI、安全验收
 
@@ -34,6 +34,8 @@ Web 与本地客户端都运行在玩家控制的设备上。把 JSON 改名、�
 
 选择方案 B，并锁定以下规则：
 
+本 ADR 只锁定正式发行边界，不代表仓库当前已经实现 Launcher、Native 桥、发布工具或 FastAPI。此前的实验切片未使用真实证书、TLS/KMS 与生产部署，本轮为避免伪完成和维护负担已删除；R2 将按真实环境重新实现。
+
 1. 正式客户端为 Cocos Creator 3.8.8 Windows Native；Web Desktop 只用于 R0/R1 开发预览和自动化验证，不作为正式商业发行入口。
 2. 游戏通过独立 Win32 启动器启动。启动器先验证自身 Authenticode，再通过 HTTPS 请求最新签名文件清单。
 3. 发布清单使用 RSA-PSS-SHA256；私钥只存在于离线签名环境或 KMS/HSM，启动器只嵌入公钥。
@@ -51,7 +53,7 @@ Web 与本地客户端都运行在玩家控制的设备上。把 JSON 改名、�
 
 ## 影响
 
-- 代码：新增 `native/launcher/`、`tools/release-security/` 和 `services/api/` 发布安全切片；后续新增 Cocos Native 配置桥接与 Node Battle Service。
+- 代码：R1 当前不保留 `native/launcher/`、`tools/release-security/`、`services/api/` 或 Cocos Native 配置桥。R2 开工时按本 ADR 重新建立。
 - 数据：正式规则包使用 AES-256-GCM；源 JSON 继续作为创作事实源，但不得直接进入正式运行时依赖。
 - Replay：Replay 继续记录 `configVersion`、`battleRuleVersion` 和最终 Hash，由权威服务生成或复核。
 - 性能：核心文件每次完整 Hash；普通资源使用签名 Build 范围内的增量缓存。
@@ -61,7 +63,7 @@ Web 与本地客户端都运行在玩家控制的设备上。把 JSON 改名、�
 ## 迁移方案
 
 1. R0/R1 继续完成 Web 技术验证，不把明文预览包对外正式发行。
-2. R2 前置阶段完成发布工具、原生启动器和 FastAPI 发布安全接口。
+2. R2 前置阶段在真实证书、HTTPS、Secret/KMS 和部署环境下重新完成发布工具、原生启动器和 FastAPI 发布安全接口。
 3. 将 Cocos 正式运行时从 `JsonAsset` 直接读取迁移到单一 `ConfigRegistry`，接入 Native AES-GCM 解密桥；编辑器预览继续读取源 JSON。
 4. 启用 Cocos Windows Release 脚本加密，生成 staging 目录，加入加密规则包与已签名启动器。
 5. 清单签名、离线复验、篡改拒绝、断网冷启动和 Authenticode 全链路通过后，才允许生成正式安装器。

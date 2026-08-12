@@ -1,6 +1,6 @@
 import type { RoomPrefabCatalogEntry } from './rooms/discover-room-prefabs';
 import type { CrewPrefabCatalogEntry } from './crew/discover-crew-prefabs';
-import { isPrototypeSceneNodeName, type PrototypeSceneNodeKey } from './scene/prototype-scene-names';
+import { isSceneNodeName, type SceneNodeKey } from './scene/scene-names';
 import {
   componentTypeMatches,
   getSceneComponentUuid,
@@ -10,8 +10,8 @@ import {
   type SceneQueryPort,
 } from './shared/editor-scene';
 
-export type AuthoringPageId = 'scene' | 'rooms' | 'crew' | 'validation';
-export type AuthoringSelectionKind = 'none' | 'room-instance' | 'crew-instance' | 'scene-settings' | 'semantic-node' | 'node';
+export type AuthoringPageId = 'scene' | 'hulls' | 'rooms' | 'crew' | 'validation';
+export type AuthoringSelectionKind = 'none' | 'room-instance' | 'crew-instance' | 'ship-instance' | 'semantic-node' | 'node';
 
 export interface AuthoringNodeBase {
   readonly uuid?: string;
@@ -49,39 +49,20 @@ export interface AuthoringCrewSelection extends AuthoringNodeBase {
   readonly definitionFound: boolean;
 }
 
-export interface SceneCoreParameters {
-  readonly gridColumns: number;
-  readonly gridRows: number;
-  readonly cellSize: number;
-  readonly snapRoomsInEditor: boolean;
-  readonly minScale: number;
-  readonly maxScale: number;
-  readonly zoomStep: number;
-}
-
-export interface SceneAppearanceSummary {
-  readonly gridLineWidth?: number;
-  readonly invalidHullCells: readonly { readonly x: number; readonly y: number }[];
-  readonly gridBackgroundColor?: string;
-  readonly gridLineColor?: string;
-  readonly invalidHullCellColor?: string;
-  readonly gridRootReferenced: boolean;
-}
-
-export interface AuthoringSceneSettingsSelection extends AuthoringNodeBase {
-  readonly kind: 'scene-settings';
-  readonly typeId: 'scene-settings';
-  readonly page: 'scene';
-  readonly core: SceneCoreParameters;
-  readonly appearance: SceneAppearanceSummary;
-  readonly componentStatus: { readonly sceneSettings: boolean; readonly cameraController: boolean };
+export interface AuthoringShipSelection extends AuthoringNodeBase {
+  readonly kind: 'ship-instance';
+  readonly typeId: 'ship-instance';
+  readonly page: 'hulls';
+  readonly shipId?: string;
+  readonly hullDefinitionId?: string;
+  readonly validation: { readonly ok: boolean; readonly message: string };
 }
 
 export interface AuthoringSemanticSelection extends AuthoringNodeBase {
   readonly kind: 'semantic-node';
   readonly typeId: 'semantic-node';
   readonly page: 'scene';
-  readonly semanticRole: PrototypeSceneNodeKey;
+  readonly semanticRole: SceneNodeKey;
 }
 
 export interface AuthoringNodeSelection extends AuthoringNodeBase {
@@ -94,7 +75,7 @@ export type AuthoringSelection =
   | AuthoringNoneSelection
   | AuthoringRoomSelection
   | AuthoringCrewSelection
-  | AuthoringSceneSettingsSelection
+  | AuthoringShipSelection
   | AuthoringSemanticSelection
   | AuthoringNodeSelection;
 
@@ -119,7 +100,7 @@ export interface AuthoringObjectRecognizer {
 export const authoringObjectRecognizers: readonly AuthoringObjectRecognizer[] = [
   { typeId: 'room-instance', recognize: recognizeRoomInstance },
   { typeId: 'crew-instance', recognize: recognizeCrewInstance },
-  { typeId: 'scene-settings', recognize: recognizeSceneSettings },
+  { typeId: 'ship-instance', recognize: recognizeShipInstance },
   { typeId: 'semantic-node', recognize: recognizeSemanticNode },
   { typeId: 'node', recognize: recognizeNode },
 ];
@@ -141,26 +122,11 @@ async function recognizeCrewInstance(context: AuthoringObjectRecognizerContext):
   const component = findComponentInNode(node, 'CrewView', context.componentClasses);
   const componentUuid = getSceneComponentUuid(component);
   if (componentUuid === undefined) return null;
-  let inspector: CrewInspectorResult | null = null;
+  let inspector: CrewInspectorResult;
   try {
-    inspector = await context.scene.executeComponentMethod(componentUuid, 'getAuthoringInspectorState', []) as CrewInspectorResult | null;
+    inspector = await context.scene.executeComponentMethod(componentUuid, 'getAuthoringInspectorState', []) as CrewInspectorResult;
   } catch {
-    // 旧 CrewView 仍通过公开 query-component 读取白名单字段。
-  }
-  if (inspector === null || typeof inspector !== 'object') {
-    try {
-      const queried = await context.scene.queryComponent(componentUuid);
-      inspector = {
-        ok: false,
-        message: '当前 CrewView 脚本未提供编辑器查询状态',
-        crewInstanceId: readStringProperty(queried?.value?.crewInstanceId),
-        crewDefinitionId: readStringProperty(queried?.value?.crewDefinitionId),
-        initialRoomInstanceId: readStringProperty(queried?.value?.initialRoomInstanceId),
-        initialStationIndex: readFiniteNumber(unwrapRecord(queried?.value), 'initialStationIndex'),
-      };
-    } catch {
-      inspector = { ok: false, message: '无法读取 CrewView 实例状态' };
-    }
+    inspector = { ok: false, message: '无法读取船员视图白名单状态' };
   }
   const definitionId = normalizeOptionalString(inspector.crewDefinitionId);
   return {
@@ -184,24 +150,11 @@ async function recognizeRoomInstance(context: AuthoringObjectRecognizerContext):
   const componentUuid = getSceneComponentUuid(component);
   if (componentUuid === undefined) return null;
 
-  let inspector: RoomInspectorResult | null = null;
+  let inspector: RoomInspectorResult;
   try {
-    inspector = await context.scene.executeComponentMethod(componentUuid, 'getAuthoringInspectorState', []) as RoomInspectorResult | null;
+    inspector = await context.scene.executeComponentMethod(componentUuid, 'getAuthoringInspectorState', []) as RoomInspectorResult;
   } catch {
-    // 旧脚本没有查询方法时仍显示实例基础信息，避免面板退化为空白。
-  }
-  if (inspector === null || typeof inspector !== 'object') {
-    try {
-      const queried = await context.scene.queryComponent(componentUuid);
-      inspector = {
-        ok: false,
-        message: '当前 RoomView 脚本未提供编辑器查询状态',
-        roomInstanceId: readStringProperty(queried?.value?.roomInstanceId),
-        roomDefinitionId: readStringProperty(queried?.value?.roomDefinitionId),
-      };
-    } catch {
-      inspector = { ok: false, message: '无法读取 RoomView 实例状态' };
-    }
+    inspector = { ok: false, message: '无法读取房间视图白名单状态' };
   }
   const definitionId = normalizeOptionalString(inspector.roomDefinitionId);
   return {
@@ -220,52 +173,36 @@ async function recognizeRoomInstance(context: AuthoringObjectRecognizerContext):
   };
 }
 
-async function recognizeSceneSettings(context: AuthoringObjectRecognizerContext): Promise<AuthoringSceneSettingsSelection | null> {
+async function recognizeShipInstance(context: AuthoringObjectRecognizerContext): Promise<AuthoringShipSelection | null> {
   const node = context.selectedNode;
   if (node === undefined) return null;
-  const settings = findComponentInNode(node, 'PrototypeSceneSettings', context.componentClasses);
-  const camera = findComponentInNode(node, 'CameraController', context.componentClasses);
-  // AppRoot 的可编辑契约要求两个权威组件同时存在；缺一个时交给语义/普通节点回退，
-  // 避免把半配置节点误显示成可以保存的场景设置。
-  if (settings === null || camera === null) return null;
-
-  const settingsValue = await queryComponentValue(context.scene, settings);
-  const cameraValue = await queryComponentValue(context.scene, camera);
-  const core = {
-    gridColumns: readFiniteNumber(settingsValue, 'gridColumns'),
-    gridRows: readFiniteNumber(settingsValue, 'gridRows'),
-    cellSize: readFiniteNumber(settingsValue, 'cellSize'),
-    snapRoomsInEditor: readBoolean(settingsValue, 'snapRoomsInEditor'),
-    minScale: readFiniteNumber(cameraValue, 'minScale'),
-    maxScale: readFiniteNumber(cameraValue, 'maxScale'),
-    zoomStep: readFiniteNumber(cameraValue, 'zoomStep'),
-  };
-  const invalidHullCells = readGridPositions(settingsValue?.invalidHullCells);
+  const component = findComponentInNode(node, 'ShipView', context.componentClasses);
+  const componentUuid = getSceneComponentUuid(component);
+  if (componentUuid === undefined) return null;
+  let inspector: ShipInspectorResult;
+  try {
+    inspector = await context.scene.executeComponentMethod(componentUuid, 'getAuthoringInspectorState', []) as ShipInspectorResult;
+  } catch {
+    inspector = { ok: false, message: '无法读取飞船视图白名单状态' };
+  }
   return {
-    kind: 'scene-settings',
-    typeId: 'scene-settings',
-    page: 'scene',
+    kind: 'ship-instance',
+    typeId: 'ship-instance',
+    page: 'hulls',
     ...nodeInfo(node, context.tree),
-    core,
-    appearance: {
-      gridLineWidth: readFiniteNumber(settingsValue, 'gridLineWidth'),
-      invalidHullCells,
-      gridBackgroundColor: readColor(settingsValue?.gridBackgroundColor),
-      gridLineColor: readColor(settingsValue?.gridLineColor),
-      invalidHullCellColor: readColor(settingsValue?.invalidHullCellColor),
-      gridRootReferenced: hasReference(settingsValue?.gridRoot),
-    },
-    componentStatus: { sceneSettings: settings !== null, cameraController: camera !== null },
+    shipId: normalizeOptionalString(inspector.shipId),
+    hullDefinitionId: normalizeOptionalString(inspector.hullDefinitionId),
+    validation: { ok: inspector.ok === true, message: typeof inspector.message === 'string' ? inspector.message : '未返回飞船校验状态' },
   };
 }
 
 async function recognizeSemanticNode(context: AuthoringObjectRecognizerContext): Promise<AuthoringSemanticSelection | null> {
   const node = context.selectedNode;
   if (node === undefined) return null;
-  const keys: readonly PrototypeSceneNodeKey[] = [
-    'mainCamera', 'canvas', 'background', 'worldRoot', 'shipRoot', 'gridRoot', 'roomRoot', 'crewRoot', 'previewRoot', 'uiRoot', 'hudLayer', 'appRoot',
+  const keys: readonly SceneNodeKey[] = [
+    'mainCamera', 'canvas', 'worldRoot', 'currentShipMount', 'playerShipMount', 'enemyShipMount', 'shipView', 'gridRoot', 'roomRoot', 'crewRoot', 'effectRoot', 'projectileRoot', 'battleEnvironment', 'uiRoot', 'appRoot',
   ];
-  const semanticRole = keys.find((key) => isPrototypeSceneNodeName(node.name, key));
+  const semanticRole = keys.find((key) => isSceneNodeName(node.name, key));
   if (semanticRole === undefined) return null;
   return { kind: 'semantic-node', typeId: 'semantic-node', page: 'scene', semanticRole, ...nodeInfo(node, context.tree) };
 }
@@ -292,6 +229,13 @@ interface CrewInspectorResult {
   readonly initialStationIndex?: unknown;
 }
 
+interface ShipInspectorResult {
+  readonly ok?: boolean;
+  readonly message?: string;
+  readonly shipId?: unknown;
+  readonly hullDefinitionId?: unknown;
+}
+
 function findComponentInNode(
   node: SceneNodeTree,
   requestedType: string,
@@ -302,17 +246,6 @@ function findComponentInNode(
     if (componentTypeMatches(candidate, requestedType, classes)) return candidate;
   }
   return null;
-}
-
-async function queryComponentValue(scene: SceneQueryPort, component: SceneComponentInfo | null): Promise<Record<string, unknown> | undefined> {
-  const uuid = getSceneComponentUuid(component);
-  if (uuid === undefined) return undefined;
-  try {
-    const property = await scene.queryComponent(uuid);
-    return unwrapRecord(property?.value);
-  } catch {
-    return undefined;
-  }
 }
 
 function nodeInfo(node: SceneNodeTree, tree: SceneNodeTree): AuthoringNodeBase {
@@ -351,24 +284,6 @@ function unwrap(value: unknown): unknown {
   return current;
 }
 
-function unwrapRecord(value: unknown): Record<string, unknown> | undefined {
-  const result = unwrap(value);
-  return typeof result === 'object' && result !== null && !Array.isArray(result) ? result as Record<string, unknown> : undefined;
-}
-
-function readProperty(record: Record<string, unknown> | undefined, key: string): unknown {
-  return unwrap(record?.[key]);
-}
-
-function readFiniteNumber(record: Record<string, unknown> | undefined, key: string): number {
-  const value = readProperty(record, key);
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function readBoolean(record: Record<string, unknown> | undefined, key: string): boolean {
-  return readProperty(record, key) === true;
-}
-
 function readStringProperty(value: unknown): string | undefined {
   const result = unwrap(value);
   return typeof result === 'string' && result.trim() !== '' ? result.trim() : undefined;
@@ -381,26 +296,4 @@ function normalizeOptionalString(value: unknown): string | undefined {
 function isGridPosition(value: unknown): value is { readonly x: number; readonly y: number } {
   const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined;
   return typeof record?.x === 'number' && Number.isInteger(record.x) && typeof record.y === 'number' && Number.isInteger(record.y);
-}
-
-function readGridPositions(value: unknown): readonly { readonly x: number; readonly y: number }[] {
-  const array = unwrap(value);
-  if (!Array.isArray(array)) return [];
-  return array.filter(isGridPosition).map((position) => ({ x: position.x, y: position.y }));
-}
-
-function readColor(value: unknown): string | undefined {
-  const record = unwrapRecord(value);
-  if (record === undefined) return undefined;
-  const channels = ['r', 'g', 'b', 'a'].map((key) => {
-    const channel = unwrap(record[key]);
-    return typeof channel === 'number' && Number.isFinite(channel) ? Math.max(0, Math.min(255, Math.round(channel))) : undefined;
-  });
-  if (channels.some((channel) => channel === undefined)) return undefined;
-  return `#${channels.map((channel) => (channel as number).toString(16).padStart(2, '0')).join('')}`;
-}
-
-function hasReference(value: unknown): boolean {
-  const record = unwrapRecord(value);
-  return typeof record?.uuid === 'string' && record.uuid !== '';
 }

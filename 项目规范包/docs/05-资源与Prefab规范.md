@@ -8,6 +8,8 @@
 
 ## 8.1 Asset Bundle
 
+当前 R1 Web Desktop 基线使用 Creator 内置 `main` Bundle：BootScene 作为启动入口，MainScene 预加载 BattleScene；Boot/Battle 使用场景资源自动释放。Web Desktop 不提供小游戏平台的初始场景分包。下列自定义 Bundle 是资源规模增长后的目标拆分，不在只有少量持久场景资源时提前搬迁。
+
 建议：
 
 ```text
@@ -34,7 +36,7 @@ bundle-localization
 
 ## 8.2 Prefab 策略
 
-Prefab 用于 RoomView、CrewView、ProjectileView、ExplosionView、CrewCard、RoomCard、ItemCard、Popup、标准 UI。
+Prefab 用于 `UIRoot`、页面、`ShipView`、船体外观、RoomView、CrewView、ProjectileView、ExplosionView、重复能源行和标准 UI。
 
 禁止把运行期可能出现的所有房间和船员副本都手工摆在 Scene 中。初始布局、教学样例和设计校验允许并推荐放置代表性 Prefab 实例。
 
@@ -52,11 +54,10 @@ Prefab + 配置数据 + instantiate
 - 需要长期保留的 Component 必须由编辑器挂载并序列化；Bootstrap 不得用运行时 `addComponent()` 隐藏设计配置入口。
 - View 对 `UITransform`、`Graphics` 等必需组件使用 Cocos 原生 `@requireComponent` 声明；设计人员添加 View 时由引擎自动补齐依赖，Prefab 仍需把最终组件持久保存为可见资产。
 - 设计人员可调整的视觉尺寸、颜色、间距、层级引用、Prefab 引用和交互开关必须暴露到 Inspector，不得散落为脚本硬编码常量；房间逻辑宽高等规则字段使用版本化 JSON 和插件表单，不在 View 上保留副本。
-- 同一场景级参数只允许一个来源：网格列数、行数、格子尺寸、吸附开关和网格外观统一配置在 AppRoot 的 SceneSettings；GridRoot 只保留 Node、UITransform、Graphics 等绘制目标能力。
-- View 与 Prefab 只读取 SceneSettings，不得再次暴露同名场景参数，避免多个组件数值不一致。
-- Inspector 的显示名称、工具提示和分组使用中文；代码属性名、类名、Prefab/Scene 文件名和稳定业务 ID 仍按英文命名规范执行。Prototype 标准骨架的新建 Node 使用中文语义名，旧英文 Node 名只作为兼容别名，已有场景不自动改名。
+- 规则网格只允许一个来源：列数、行数、有效格 Mask、船员上限和房间上限来自 `HullDefinition`；`ShipView` 只暴露格子像素尺寸、颜色、层级引用和表现开关。
+- Inspector 的显示名称、工具提示和分组使用中文；代码属性名、类名、Prefab/Scene 文件名和稳定业务 ID 仍按英文命名规范执行。Boot/Main/Battle 新骨架只创建中文语义 Node。
 - `executeInEditMode` 只用于轻量预览、尺寸刷新、锚点辅助和编辑器吸附，不在编辑器生命周期中运行完整 GameCore 或产生不可控资产修改。
-- 编辑器中已有的初始实例由运行时优先复用；动态生成仅用于玩家新增内容、对象池对象或场景未提供实例时的明确备用路径。
+- Bootstrap 只连接编辑器中已有的初始实例，不提供正式节点缺失时的运行时备用路径。动态生成只用于玩家 Command 确认后的内容和对象池对象。
 
 ### 网格内容拖动吸附
 
@@ -69,7 +70,7 @@ Prefab + 配置数据 + instantiate
 ### 编辑器资产验收
 
 - Scene 可打开，层级完整，关键组件已持久挂载。
-- AppRoot 存在且只存在一个 SceneSettings；GridRoot 不存在重复的网格配置组件。
+- ShipView 的 HullDefinition 引用有效；Scene/RoomView 不存在第二份规则网格配置。
 - Prefab 可单独打开并看到外观，不依赖运行时 `bind()` 才出现。
 - 中文 Inspector 字段可修改，修改后预览立即刷新。
 - 网格对象拖动后自动吸附，保存并重开位置不漂移。
@@ -81,23 +82,26 @@ Prefab + 配置数据 + instantiate
 创作工具可识别类型的稳定 ID、识别器顺序、白名单 DTO、字段读写边界和接入检查表统一见 [`19-Cocos创作工具类型接入规范.md`](./19-Cocos创作工具类型接入规范.md)。本节只保留资源与 Prefab 的边界规则。
 
 - 全项目只保留 `extensions/starship-editor-tools/` 一个创作工具宿主；房间、NPC、关卡按领域模块注册，不各建一套扩展生命周期。
-- 房间模块从资源管理器“新建 → 星舰协议 → 新建房间建筑”打开中文表单；场景结构、校验和实例创建统一从 Project / Panel 直接菜单打开同一个可停靠“星舰创作工具”面板。
+- 房间与船员模块从资源管理器菜单打开中文表单；场景、船体、飞船、房间、船员和校验统一从 Project / Panel 直接菜单打开同一个“星舰创作工具”面板。
 - 表单创建 `assets/config/rooms/<room-id>.json` 和目标目录中的 Prefab 副本；创建前必须校验 ID、数值、路径和重名，禁止覆盖。
 - 多资源创建必须有回滚：后续步骤失败时删除本次已经创建的资产，回滚失败也必须给出明确错误和残留路径。
 - 插件通过 Asset DB `create-asset`、`copy-asset`、`delete-asset`、`open-asset` 等公开消息操作资源，不直接写 `.prefab` / `.meta` 序列化文本。
 - 新 Prefab 创建后插件自动打开 Prefab，并用公开 Scene 消息把生成的 JsonAsset 绑定到 RoomView 的“房间定义”，校验 RoomView、UITransform、Graphics 后保存；设计人员仍可在 Inspector 复核或替换引用，绑定缺失、JSON 无效或稳定 ID 不匹配时不能验收。
 - 房间建筑菜单不维护第二份清单：插件扫描房间 JSON 与 Prefab 的 Asset DB 真实依赖，只把“恰好一个有效定义 + RoomView”的 Prefab 放入可创建列表；无效、缺失或多重绑定进入中文校验警告，不进入菜单。
 - 房间 JSON + Prefab 是项目级资源库，不绑定某个 Scene；扩展监听公开 `asset-db:asset-change`，资源新增、修改、删除或重新导入后自动重建目录并通知面板，面板不得要求设计人员手动刷新才能看到新资源。手动刷新只作为故障恢复入口。
-- 创作面板只把当前 Scene 作为放置目标：完整标准骨架路由到唯一 `RoomRoot`，用 GameCore 放置校验扫描首个合法空位，生成唯一实例 ID，并保留 Prefab 关联；无完整骨架时优先把实例挂到当前/首个有效 Canvas 的顶层，没有 Canvas 才挂到场景根节点。非网格放置不伪造逻辑格坐标、不执行网格重叠校验，并显示对应中文状态。
-- 网格已满、多个 RoomRoot 冲突、目标节点无 UUID 或创建结果缺少 RoomView 时必须回滚，不留下临时节点；资源目录仍可在其他 Scene 中继续使用。
-- 标准场景骨架只创建缺失节点和组件，遇到重名、错误父级或重复配置入口即停止并回滚本次创建；公开 Scene 消息负责节点、组件、属性、保存和一次 Undo/Redo 快照。
+- 创作面板只在明确选中的 `ShipView` 内创建房间，在明确选中的 RoomView 内创建船员；禁止回退到 Canvas、场景根或跨舰搜索。
+- 房间实例由所属 ShipView 使用 HullDefinition 扫描首个合法空位，生成该飞船内唯一实例 ID；网格已满、目标冲突、引用缺失或组件无效时必须在单次 Undo 中回滚。
+- 发现已有房间定义、坐标、实例 ID 或占用校验失败时必须 fail-closed，不能跳过非法房间继续寻找空位。
+- 场景骨架只创建 Boot/Main/Battle 缺失的中文节点和组件；遇到重名或错误父级停止并回滚，不创建能源/船员等一次性玩法内容。
 - 面板显示期间每 500ms 读取公开 Selection，隐藏/关闭时停止；执行创建前必须重新查询场景和选择，不能依赖缓存状态。禁止层级私有右键适配器、`cce.*` 和 DOM 注入。
 - 创作面板采用左侧领域分页、分类筛选、资源列表和右侧中文属性检查器；已接入领域的规则字段必须支持直接编辑并通过公开 Asset DB `save-asset` 保存。稳定 ID、Prefab 引用和资源路径保持只读，保存前重新读取并校验 JSON，避免面板缓存覆盖外部修改。
 - 面板选择联动只在 UUID 变化时自动切页；实例字段只读，定义字段通过白名单表单编辑。新增 NPC、关卡等类型必须先按 [`19-Cocos创作工具类型接入规范.md`](./19-Cocos创作工具类型接入规范.md) 显式注册，不得自动暴露全部组件字段。
 - Prefab 保存颜色、组件、锚点与资源引用；JSON 保存版本、稳定 ID、分类、逻辑尺寸和规则数值，禁止写 Node 或世界坐标。
 - R1 船员里程碑在同一插件内增加“船员”分页：扫描 `assets/config/crews/*.json` 与 Crew Prefab 的真实依赖，支持中文表单创建、定义编辑、Prefab 绑定、场景实例化、Selection 识别、单次 Undo 和失败回滚；不创建第二个插件。
-- `CrewMember.prefab` 是船员模板，`EngineerCrew.prefab` 与 `GunnerCrew.prefab` 保存各自 JSON 引用、默认实例 ID 和职业外观。`CrewView` 的实例 ID、初始房间、初始站位、主体颜色、边框颜色、选中描边和标记直径全部使用中文 Inspector。
-- `PowerRoomRow.prefab` 是能源面板两条重复控制行的唯一模板；插件用公开 Scene API 建立两个关联实例，并在组件方法内设置面板局部坐标，禁止把 `create-node.position` 的场景坐标误当局部坐标。
+- `CrewMember.prefab` 是船员模板，`EngineerCrew.prefab` 与 `GunnerCrew.prefab` 保存各自 JSON 引用和职业外观；Prefab 内实例 ID 必须为空，由飞船场景创作分配。`CrewView` 的实例 ID、初始房间、初始站位、主体颜色、边框颜色、选中描边和标记直径全部使用中文 Inspector。
+- `PowerRoomRow.prefab` 是重复能源控制行的模板；正式 `PowerPanel` 只绑定场景中持久保存的行，不运行时创建或保留未知房间的幽灵行。
+- `ShipView.prefab` 内实例 ID 为空，包含船体外观、网格根、房间容器、船员层和特效层；Main/Battle 的场景实例由插件生成唯一 `shipId` 并绑定 HullDefinition。
+- `UIRoot.prefab` 是 Main/Battle 唯一公共 UI 源，包含 HUD、页面、弹窗、提示和加载层；业务 Page 均为独立 Prefab。
 - 未进入里程碑的普通 NPC 和关卡仍不得添加空菜单、占位 Prefab 或万能实体配置。
 
 ### 领域创作入口映射
@@ -105,15 +109,15 @@ Prefab + 配置数据 + instantiate
 | 内容 | 规则源 | 表现源 | 主要创作入口 | 层级入口 |
 | --- | --- | --- | --- | --- |
 | 房间/建筑 | `assets/config/rooms/*.json` | 房间 Prefab | 资源管理器表单 + Inspector | 创作面板创建已发现实例 |
-| 场景结构 | Scene 层级 | Scene/Prefab | 场景编辑器或创作面板初始化骨架 | 创作面板补齐标准骨架 |
-| 船体/关卡地图 | 版本化关卡 JSON | Scene 可视化布局 | Scene + 校验/导出面板 | 仅加入已经实现的语义对象 |
+| 场景结构 | Boot/Main/Battle Scene 层级 | Scene + UIRoot Prefab | 创作面板初始化中文骨架 | 不生成一次性玩法内容 |
+| 船体/飞船 | `assets/config/hulls/*.json` | 船体外观 + ShipView Prefab | “船体与飞船”分页 | 在明确挂载点创建唯一 shipId |
 | 船员 | `assets/config/crews/*.json` | Crew Prefab | 创作面板“船员”分页 + 资源管理器菜单 | 发现、编辑并创建 CrewView 实例 |
 | 其他 NPC | 定义资产 | NPC Prefab | 对应里程碑的定义表单 | 有可用实现后再加入 |
 | 槽位装备、技能、奖励、AI 条件 | JSON/专用面板 | 绑定点或 UI | Inspector/专用面板 | 不创建空节点 |
 
 其他 NPC、关卡和其他领域在进入对应里程碑前不得添加空菜单、占位 Prefab 或万能实体编辑器。
 
-未来关卡仍以 Scene 作为可视化创作输入；插件导出 `schemaVersion`、`levelId`、`hullId`、定义 ID、实例 ID 和整数格坐标的逻辑布局 JSON，运行时不直接把 Scene 节点当作规则状态。
+未来关卡仍以 Scene 作为可视化创作输入；插件导出 `schemaVersion`、`levelId`、`shipId`、`hullId`、定义 ID、实例 ID 和整数格坐标的逻辑布局 JSON，运行时不直接把 Scene 节点当作规则状态。
 
 Inspector 装饰器和代码写法见 `15-编码与注释规范.md`；完成证据要求见 `16-测试-验收-DoD.md`。
 

@@ -1,6 +1,4 @@
-import { _decorator, Component, error, EventMouse, Node } from 'cc';
-
-import { findPrototypeSceneNode, findPrototypeSceneNodePath } from '../bootstrap/PrototypeSceneNodes';
+import { _decorator, Component, error, EventMouse, input, Input, Node } from 'cc';
 
 const { ccclass, menu, property } = _decorator;
 
@@ -16,8 +14,11 @@ export class CameraController extends Component {
   @property({ displayName: '单次缩放步长', tooltip: '每次滚轮事件改变的缩放比例。', group: '缩放', min: 0.01, step: 0.01 })
   public zoomStep = 0.1;
 
-  private worldRoot: Node | null = null;
-  private canvasRoot: Node | null = null;
+  @property({ type: Node, displayName: '世界根节点', tooltip: '镜头平移与缩放作用的持久世界根节点。', group: '节点引用' })
+  public worldRoot: Node | null = null;
+
+  @property({ type: Node, displayName: '画布根节点', tooltip: '接收鼠标拖动和滚轮事件的持久画布节点。', group: '节点引用' })
+  public canvasRoot: Node | null = null;
   private isDragging = false;
   private isPanBlocked = false;
 
@@ -30,12 +31,8 @@ export class CameraController extends Component {
   }
 
   protected onEnable(): void {
-    const scene = this.node.scene;
-    this.worldRoot = scene === null ? null : findPrototypeSceneNodePath(scene, 'canvas', 'worldRoot');
-    this.canvasRoot = scene === null ? null : findPrototypeSceneNode(scene, 'canvas');
-
     if (this.worldRoot === null || this.canvasRoot === null) {
-      error('[INPUT] PrototypeScene 缺少 Canvas 或 WorldRoot');
+      error('[INPUT] 请在镜头控制组件中绑定世界根节点和画布根节点');
       return;
     }
 
@@ -44,7 +41,8 @@ export class CameraController extends Component {
     this.canvasRoot.on(Node.EventType.MOUSE_MOVE, this.onMouseMove, this);
     this.canvasRoot.on(Node.EventType.MOUSE_UP, this.onMouseUp, this);
     this.canvasRoot.on(Node.EventType.MOUSE_WHEEL, this.onMouseWheel, this);
-    this.canvasRoot.on(Node.EventType.MOUSE_LEAVE, this.onMouseUp, this);
+    // 全局释放事件覆盖鼠标在 Canvas 外松开的情况，避免镜头永久保持拖动状态。
+    input.on(Input.EventType.MOUSE_UP, this.onMouseUp, this);
   }
 
   protected onDisable(): void {
@@ -52,9 +50,7 @@ export class CameraController extends Component {
     this.canvasRoot?.off(Node.EventType.MOUSE_MOVE, this.onMouseMove, this);
     this.canvasRoot?.off(Node.EventType.MOUSE_UP, this.onMouseUp, this);
     this.canvasRoot?.off(Node.EventType.MOUSE_WHEEL, this.onMouseWheel, this);
-    this.canvasRoot?.off(Node.EventType.MOUSE_LEAVE, this.onMouseUp, this);
-    this.worldRoot = null;
-    this.canvasRoot = null;
+    input.off(Input.EventType.MOUSE_UP, this.onMouseUp, this);
     this.isDragging = false;
     this.isPanBlocked = false;
   }

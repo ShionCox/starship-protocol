@@ -1,5 +1,7 @@
 # 当前 HEAD：R0 场景与 Web Desktop 重新验证
 
+> 历史证据（已冻结）：下述 PrototypeScene、旧测试数量与 Web 产物只证明当时的 R0/R1 纵切，不描述 ADR-0004 后的当前架构。当前进度只看 `R1-FOUNDATION-CHECKLIST.md`。
+
 日期：2026-08-12
 
 ## 修复结论

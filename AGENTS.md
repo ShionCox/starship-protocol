@@ -15,6 +15,7 @@
 - 测试与完成定义：`项目规范包/docs/16-测试-验收-DoD.md`。
 - 任务顺序：`项目规范包/docs/17-里程碑与任务顺序.md`。
 - Windows 正式发行与版本验证：`项目规范包/docs/ADR-0002-Windows正式发行与服务端版本验证.md`。
+- R1 客户端重基线、场景复用与服务器边界：`项目规范包/docs/ADR-0004-R1客户端重基线与服务器边界.md`。
 
 规则冲突时，按以下顺序处理：
 
@@ -29,11 +30,12 @@
 ## 2. 当前阶段
 
 - 当前仓库是位于根目录的 Cocos Creator 3.8.8 工程，不要为了匹配未来 monorepo 蓝图提前搬迁目录。
-- 当前目标是 R0 技术验证原型。
-- R0 完成前，不开发登录、商城、任务、PvP、后端、舰队等外围系统。
-- 第一条正式功能任务固定为：实现 20×10 飞船逻辑网格，支持 2×2 房间拖放、非法格与重叠判断、镜头缩放/拖动、JSON 保存与恢复，并成功构建 Web Desktop。
-- R0 阶段允许把纯 TypeScript GameCore 放在 `assets/scripts/game-core/`；进入 R2 权威战斗服务前再评估抽取共享 package。
-- Windows 正式发行安全属于 R2 前置能力；除非用户明确授权，不得借安全名义把 R2 登录、经济或战斗服务提前塞进 R0。
+- R0 技术验证已经完成并冻结为历史基线；当前目标是 **R1 客户端基础重构**，进度只看根目录 `R1-FOUNDATION-CHECKLIST.md`。
+- R1 已完成能源与单层船员移动规则；维修、武器、护盾效果、伤害、胜负、AI、Replay 和 PvE 仍未完成，不得把纵切误报为完整 R1。
+- 当前运行架构固定为 `BootScene / MainScene / BattleScene`、共享 `UIRoot.prefab` 和可复用 `ShipView.prefab`；一种船体不是一个 Scene。
+- 开发期只通过 `PlayerStatePort` 使用单一玩家状态 Envelope。旧 R0/R1 三个 localStorage Key 已废弃，不做迁移。
+- 当前继续把纯 TypeScript GameCore 放在 `assets/scripts/game-core/`；进入 R2 权威战斗服务前再评估抽取共享 package。
+- 登录、商城、任务、PvP、后端、舰队和正式 Windows 发行能力不属于当前实现范围。R2 安全可执行样例已移除，只保留未来 ADR、威胁边界和验收要求。
 
 ## 3. 固定技术栈
 
@@ -41,8 +43,8 @@
 - 可见游戏画面和 UI：Cocos UI / Node / Prefab。
 - 游戏规则：Pure TypeScript GameCore。
 - 正式首发平台：Windows Native；Web Desktop 只用于 R0/R1 开发预览与自动回归。
-- Windows 启动入口：C++20 + WinHTTP / WinTrust / BCrypt / Crypt32。
-- R2 业务 API：FastAPI + MySQL 8 + Redis。
+- 未来 Windows 启动入口：C++20 + WinHTTP / WinTrust / BCrypt / Crypt32；当前仓库不实现。
+- 未来 R2 业务 API：FastAPI + MySQL 8，Redis 只在真实 Session、限流、幂等或队列需求出现时使用。
 - R2 权威战斗：Node.js + TypeScript + 共享 GameCore。
 - 运营后台：Vue 3 + TypeScript + Tailwind CSS。
 
@@ -98,7 +100,7 @@
 
 项目特有且可自研的能力包括：飞船网格、放置验证、船舱导航图、条件 AI、确定性战斗、Command/Event/Snapshot、Replay、状态 Hash、配置迁移和服务端权威校验。
 
-全项目原则上只保留一个正式入口：Logger、AssetService、AudioService、InputMapper、HttpClient、WebSocketClient、PopupService、ToastService、TickScheduler、SeededRandom、ConfigRegistry、ReplayCodec、VirtualList 和 VirtualGrid。业务模块可以增加 Adapter，不得复制第二套核心实现。
+全项目原则上只保留一个正式入口：Logger、AssetService、AudioService、InputMapper、HttpClient、WebSocketClient、PopupService、ToastService、TickScheduler、SeededRandom、GameConfigCatalog、ReplayCodec、VirtualList 和 VirtualGrid。业务模块可以增加 Adapter，不得复制第二套核心实现。
 
 新增第三方依赖必须说明：解决的问题、现有能力为何不足、ESM/Cocos/Web 兼容性、包体和维护状态。不得为少量项目特有逻辑引入重型依赖。
 
@@ -113,9 +115,9 @@
 - 大型动态列表使用统一 VirtualList/VirtualGrid。
 - 不盲目手工编辑大型 `.scene`、`.prefab` 或 `.meta` 序列化文件；确需修改时必须做针对性验证。
 - 设计人员需要调整的场景、Prefab 和视觉参数必须在 Cocos 编辑器中可见、可选、可修改；数据驱动内容应提供 Prefab 或 `executeInEditMode` 编辑器预览，不能只在运行时临时生成。
-- 场景初始布局必须通过 Scene/Prefab 实例搭建；Bootstrap 优先复用编辑器实例，不得用运行时 `addComponent()` 隐藏本应由设计人员配置的组件。
-- 每个场景级规则只能有一个配置入口；网格列数、行数、格子尺寸、吸附开关和网格外观统一放在 AppRoot 的 SceneSettings，GridRoot 与房间组件不得再保存副本。
-- 所有设计人员可调的 Inspector 属性必须使用中文 `displayName`、中文 `tooltip` 和必要的中文分组；TypeScript 标识符、Prefab/Scene 文件名和稳定业务 ID 仍使用英文规范。Prototype 标准场景骨架新创建的 Node 使用中文语义名（如“画布”“世界根”“房间容器”）；运行时和插件必须同时兼容旧英文 Node 名，已有英文场景不自动改名。
+- 场景初始布局必须通过 Scene/Prefab 实例搭建；Bootstrap 只连接编辑器已保存实例，缺少关键节点、组件或引用时中文报错并停止，禁止运行时补节点、组件、房间或 UI。
+- 船体网格列数、行数、有效格 Mask 和容量只来自 `HullDefinition`；场景/Prefab 只保存格子像素尺寸、颜色、引用等表现参数，不保留第二份规则网格。
+- 所有设计人员可调的 Inspector 属性必须使用中文 `displayName`、中文 `tooltip` 和必要的中文分组；TypeScript 标识符、Prefab/Scene 文件名和稳定业务 ID 仍使用英文规范。新场景骨架只使用中文语义 Node 名，不再维护 Prototype 英文别名兼容链。
 - 网格化内容在编辑器中拖动时应自动吸附到项目逻辑网格；吸附只改变表现坐标，保存和规则校验仍使用 GameCore 整数逻辑坐标。
 - 批量内容创建、校验和未来关卡导出统一放在 `extensions/starship-editor-tools/` 项目扩展中；按房间、NPC、关卡分模块，不为每个领域复制插件宿主。
 - 编辑器扩展不是运行时依赖；插件关闭或加载失败时，游戏运行、存档、测试和构建必须不受影响。
@@ -124,7 +126,7 @@
 - 房间资源由 JSON + Prefab 真实依赖自动发现；创作面板负责标准场景骨架和房间实例创建，不要求设计人员先创建空节点再手动挂组件。面板显示期间每 500ms 轮询公开 Selection，隐藏或关闭时停止，执行动作前必须重新校验选择。NPC、关卡等领域只有进入对应里程碑后才能注册菜单。
 - 创作面板采用领域分页、分类筛选、资源列表和中文属性检查器；已接入领域的规则字段必须支持直接编辑并通过公开 Asset DB 保存。稳定 ID、Prefab 引用和资源路径只读，保存前重新读取并校验 JSON，避免面板缓存覆盖外部修改。
 - 创作工具可识别类型的稳定 ID、识别器顺序、白名单 DTO、只读/可写边界和接入检查表统一遵循 `项目规范包/docs/19-Cocos创作工具类型接入规范.md`；选择联动只在 UUID 变化时自动切页，禁止把原始组件 dump 或未注册类型自动暴露给面板。
-- `assets/config/**/*.json` 是创作与发布输入；R2 正式 Windows 运行时不得直接依赖源 JsonAsset，必须通过唯一 ConfigRegistry 消费已验证解密配置。
+- `assets/config/**/*.json` 是 R1 创作与开发输入；运行时通过唯一 `GameConfigCatalog` 消费已验证定义。R2 正式配置分发在真实发布阶段重新实现。
 - Boot 首包保持最小；战斗资源按需预加载并及时释放。
 - 业务输入统一映射为 Action；GameCore 只接收 Command，不接收鼠标或触摸坐标。
 - 单个 Component 达到约 500～800 行时必须评估按职责拆分。
@@ -177,7 +179,8 @@
 
 ## 12. 文档与交付
 
-- R0 进度以根目录 `R0-CHECKLIST.md` 为唯一完成清单；每完成一个步骤，必须在同一批修改中补齐实现、验证和人工/视觉证据后才能勾选。
+- `R0-CHECKLIST.md` 只保留历史基线，不再追加 R1 实现或测试计数。
+- R1 当前进度以根目录 `R1-FOUNDATION-CHECKLIST.md` 为唯一完成清单；每完成一个步骤，必须在同一批修改中补齐实现、验证和人工/视觉证据后才能勾选。
 - R2 Windows 发行安全进度以根目录 `R2-SECURITY-CHECKLIST.md` 为完成清单，不能挤占或提前勾选 R0 项目。
 - 持久证据放在 `docs/evidence/`；不得只引用临时目录、口头结论或可能失效的外部路径。
 - 修改业务规则时同步更新对应唯一主文档。

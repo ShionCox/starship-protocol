@@ -102,7 +102,7 @@
     "__prefab": {
       "__id__": 5
     },
-    "roomInstanceId": "room-reactor-1",
+    "roomInstanceId": "",
     "roomDefinitionId": "room-laser",
     "definitionAsset": {
       "__uuid__": "9ef5b1ea-1d3f-415d-a5fb-0d180e27eeeb",

@@ -1,2 +1,0 @@
-set(_STARSHIP_SECURITY_DIR ${CMAKE_CURRENT_LIST_DIR})
-include(${_STARSHIP_SECURITY_DIR}/../src/CMakeLists.txt)

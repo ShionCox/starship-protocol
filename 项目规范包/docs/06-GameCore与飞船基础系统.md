@@ -31,33 +31,62 @@ interface GridSize {
 ```text
 Grid Position
 ↓
-PrototypeSceneSettings / 场景坐标适配
+ShipView / 船体局部坐标适配
 ↓
 Local Position
 ↓
 Cocos Node
 ```
 
-场景中的网格列数、行数、格子尺寸和吸附开关由 AppRoot 上唯一的 SceneSettings 提供；GridRoot 只是绘制目标，不拥有第二份网格配置。
+网格列数、行数和有效格 Mask 只来自 `HullDefinition`；ShipView 只配置格子像素尺寸、颜色与子节点引用。世界/局部坐标不是权威状态。
 
 ## 9.2 船体定义
 
 ```ts
 interface HullDefinition {
-  id: string;
-  name: string;
-  level: number;
-  width: number;
-  height: number;
-  validCells: number[];
-  maxCrew: number;
-  maxRooms?: number;
+  readonly schemaVersion: 1;
+  readonly id: string;
+  readonly displayName: string;
+  readonly level: number;
+  readonly gridWidth: number;
+  readonly gridHeight: number;
+  readonly validCells: readonly number[];
+  readonly maxCrew: number;
+  readonly maxRooms: number;
+  readonly visualId: string;
 }
 ```
 
-必须支持非矩形船体。
+必须支持非矩形船体；`validCells.length` 必须等于宽×高，且每项只能是 0/1。`ShipGridModel` 构造时必须传入已验证 HullDefinition，不保留全局 20×10 规则常量。
 
-## 9.3 占用表
+## 9.3 船实例快照
+
+```ts
+interface RoomInstanceSnapshot {
+  readonly instanceId: string;
+  readonly definitionId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly level: number;
+  readonly hp: number;
+}
+
+interface ShipSnapshot {
+  readonly schemaVersion: 1;
+  readonly shipId: string;
+  readonly hullId: string;
+  readonly revision: number;
+  readonly rooms: readonly RoomInstanceSnapshot[];
+  readonly energy: EnergySnapshot;
+  readonly crews: CrewSnapshot;
+}
+```
+
+定义 ID 与实例 ID 必须分开。房间、船员实例短 ID 只在所属 `shipId` 内唯一；跨模型引用和 Command 必须同时携带 shipId。
+
+ShipModel 是唯一修改入口；不得向应用层暴露可变的网格、能源、导航或船员子模型，查询统一使用只读快照。
+
+## 9.4 占用表
 
 内部优先使用 BitSet、Uint8Array 或二维扁平数组，不要每次检测都遍历所有房间 Node。
 
@@ -180,9 +209,9 @@ R1 纵切使用 `powerGeneration` 表示能源房间实例的基础产能；未�
 
 R1 当前通过纯 TypeScript `EnergyModel` 执行 `SET_ROOM_POWER` / `RESET_ROOM_POWER`，失败保持旧状态；状态快照只保存稳定房间 ID 与当前分配，产能由有效房间定义重新计算。
 
-R1 运行时把场景中每个 `RoomView.roomInstanceId` 与已解析的 `RoomDefinition` 组成只读映射，再由 `createEnergyRooms` 生成 `EnergyRoom`；映射不读取 Node、Prefab 或像素坐标，任一实例 ID、定义或非能源产能非法时整次能源装配失败。能源快照独立保存于 Web `localStorage` 的 `starship-protocol:r1:energy`，不改变 R0 布局存档；版本不兼容、未知房间、重复分配或非法数值会整份回退为零并输出警告。
+R1 运行时把所属飞船中的 `roomInstanceId → RoomDefinition` 组成只读映射，再由 `createEnergyRooms` 生成 EnergyRoom；映射不读取 Node、Prefab 或像素坐标，任一实例 ID、定义或非能源产能非法时整艘飞船恢复失败。能源快照现在属于 ShipSnapshot，不再独立读写旧 Prototype Key。
 
-玩家界面只消费 `PowerPanelState`，按钮动作转换为 `EnergyCommand` 交给 Bootstrap 的 Handler；EnergyModel 成功后立即保存，保存失败恢复 Command 前快照，面板继续显示旧状态。当前纵切只提供基础产能和手动分配，不实现状态惩罚、Tick、武器开火、护盾效果或 AI 调电。
+玩家界面只消费带 shipId 的 `PowerPanelState`，按钮动作通过 `PlayerStatePort` 转换为船舰作用域 Command；完整玩家 Envelope 保存失败时恢复 Command 前聚合状态。当前纵切只提供基础产能和手动分配，不实现状态惩罚、Tick、武器开火、护盾效果或 AI 调电。
 
 ## FR-POWER-003 房间断电
 
@@ -248,9 +277,9 @@ R1 当前选择“拒绝 Command”：`CrewModel` 在移动前预留目标房间
 
 - `CrewDefinition` 使用 `schemaVersion = 1`，当前职业只有 `ENGINEER` / `GUNNER`，中文显示分别为“工程师”和“武器操作员”；定义只保存稳定 ID、中文名称、最大生命和每条导航边的固定 Tick 数。
 - `CrewModel` 只消费 `NavigationGraph`、初始站位和 `MOVE_CREW`；`advanceOneTick()` 是唯一移动时钟入口，快照按稳定船员实例 ID 排序，并保存当前房间、目标房间、站位、完整活动路径和边内 Tick 进度。
-- Web 原型船员快照独立保存到 `starship-protocol:r1:crew`，不写入布局或能源快照。空存档使用编辑器初始站位；新增船员补默认状态；未知旧船员、未知房间、重复实例、容量冲突、断开路径或版本错误会整份回退。
-- Command 接受、跨越导航边和最终到达均保存；写盘失败恢复前一份持久快照，跨边失败同时暂停时钟并显示中文错误。
-- Cocos `CrewView` 只负责中文 Inspector、选择、高亮和只读插值；`CrewStatusPanel` 只展示选择、当前房间、目标房间、状态与中文提示。Bootstrap 以 10Hz 调用核心 Tick，不在渲染 `update()` 中执行船员规则。
+- CrewSnapshot 属于所属 ShipSnapshot，完整玩家 Envelope 在 Command 或固定 Tick 成功后原子保存。未知船员、未知房间、重复实例、容量冲突、断开路径或版本错误会让整艘飞船恢复失败。
+- 写盘失败恢复前一份完整玩家状态；跨边失败同时暂停时钟并显示中文错误。
+- Cocos `CrewView` 只负责中文 Inspector、选择、高亮和只读插值；`CrewStatusPanel` 通过 shipId 绑定所选飞船。MainScene Bootstrap 以 10Hz 调用核心 Tick，不在渲染 `update()` 中执行船员规则，也不搜索其他 ShipView。
 - 当前边界只包含两名可见船员和单层房间移动，不实现岗位加成、维修、伤害、死亡、排队、跨甲板电梯、AI 或 Replay。
 
 ## FR-CREW-003 房间加成

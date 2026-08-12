@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <title><%= projectName %></title>
+    <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="full-screen" content="yes">
+    <meta name="screen-orientation" content="landscape">
+    <link rel="stylesheet" type="text/css" href="<%= cssUrl %>?v=5">
+    <link rel="icon" href="favicon.ico">
+  </head>
+  <body>
+    <div id="GameDiv" cc_exact_fit_screen="true">
+      <div id="Cocos3dGameContainer">
+        <canvas id="GameCanvas" tabindex="99"></canvas>
+      </div>
+    </div>
+    <%- include(cocosTemplate, {}) %>
+  </body>
+</html>

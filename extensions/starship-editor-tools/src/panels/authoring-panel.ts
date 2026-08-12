@@ -3,18 +3,21 @@ import {
   DEFAULT_CREW_TEMPLATE_URL,
   DEFAULT_TEMPLATE_URL,
   CREW_CATALOG_CHANGE_MESSAGE,
+  HULL_CATALOG_CHANGE_MESSAGE,
   PACKAGE_NAME,
   ROOM_CATALOG_CHANGE_MESSAGE,
 } from '../constants';
 import type { AuthoringState } from '../main';
-import type { AuthoringSelection, AuthoringSceneSettingsSelection } from '../authoring-selection';
+import type { AuthoringSelection } from '../authoring-selection';
 import type { RoomDefinitionEditRequest } from '../rooms/edit-room-definition';
 import type { RoomPrefabCatalogEntry } from '../rooms/discover-room-prefabs';
 import type { CrewDefinitionEditRequest } from '../crew/edit-crew-definition';
 import type { CrewPrefabCatalogEntry } from '../crew/discover-crew-prefabs';
 import type { CrewCreationRequest } from '../crew/create-crew-content';
+import type { HullCatalogEntry } from '../hulls/hull-catalog';
+import type { HullDefinitionInput } from '../hulls/hull-definition';
 
-type PageId = 'scene' | 'rooms' | 'crew' | 'validation';
+type PageId = 'scene' | 'hulls' | 'rooms' | 'crew' | 'validation';
 
 const ROOM_CATEGORIES = [
   ['ALL', '全部'],
@@ -42,6 +45,7 @@ const template = `
   <div class="workbench">
     <nav class="sidebar" aria-label="创作模块">
       <button id="navScene" class="nav-item active" data-page="scene"><span class="nav-icon">场</span><span>场景</span></button>
+      <button id="navHulls" class="nav-item" data-page="hulls"><span class="nav-icon">舰</span><span>船体与飞船</span></button>
       <button id="navRooms" class="nav-item" data-page="rooms"><span class="nav-icon">房</span><span>房间建筑</span></button>
       <button id="navCrew" class="nav-item" data-page="crew"><span class="nav-icon">员</span><span>船员</span></button>
       <div class="nav-divider"></div>
@@ -55,17 +59,23 @@ const template = `
             <div class="info-item"><span class="label">当前选择</span><span id="selection" class="value">正在读取…</span></div>
             <div class="info-item"><span class="label">房间容器</span><span id="target" class="value">正在读取…</span></div>
           </div>
-          <div class="actions"><ui-button id="initialize" class="blue primary-action">补齐场景骨架</ui-button><ui-button id="setupEnergy" class="blue primary-action">补齐能源闭环</ui-button><ui-button id="createPowerRowTemplate">生成能源行预制体</ui-button><ui-button id="replacePowerRows">能源行改用预制体</ui-button><ui-button id="setupCrew" class="blue primary-action">补齐船员场景</ui-button><ui-button id="sceneRefresh">重新校验</ui-button></div>
+          <div class="actions"><select id="sceneKind"><option value="BOOT">启动场景</option><option value="MAIN" selected>主场景</option><option value="BATTLE">战斗场景</option></select><ui-button id="initialize" class="blue primary-action">补齐中文场景骨架</ui-button><ui-button id="createFoundation">创建共享 Prefab</ui-button><ui-button id="mountSharedUi">挂载共享界面</ui-button><ui-button id="wireFoundation">连接场景引用</ui-button><ui-button id="sceneRefresh">重新校验</ui-button></div>
           <section id="sceneInspector" class="scene-inspector" hidden>
             <div class="inspector-heading"><div><h3 id="sceneSelectionTitle">选择属性</h3></div><span id="sceneSelectionBadge" class="badge neutral">只读</span></div>
             <div class="asset-path"><span id="sceneNodePath">—</span><span id="sceneSemanticRole">—</span></div>
             <div id="sceneBaseInfo" class="info-grid"></div>
-            <div id="sceneCoreForm" class="scene-core-form" hidden>
-              <div class="form-grid"><label>网格列数<input id="sceneGridColumns" type="number" min="1" step="1"></label><label>网格行数<input id="sceneGridRows" type="number" min="1" step="1"></label><label>格子尺寸<input id="sceneCellSize" type="number" min="1" step="1"></label><label class="check-field">房间自动吸附<input id="sceneSnapRooms" type="checkbox"></label><label>最小缩放<input id="sceneMinScale" type="number" min="0.1" step="0.1"></label><label>最大缩放<input id="sceneMaxScale" type="number" min="0.1" step="0.1"></label><label>缩放步长<input id="sceneZoomStep" type="number" min="0.01" step="0.01"></label></div>
-              <div class="inspector-actions scene-actions"><ui-button id="saveSceneCore" class="blue primary-action">保存场景参数</ui-button></div>
-            </div>
           </section>
         </section>
+      </section>
+
+      <section id="pageHulls" class="page" hidden>
+        <div class="page-heading"><div><h2>船体与飞船</h2></div><span id="hullCount" class="count">0 个</span></div>
+        <section class="panel-card scene-card">
+          <div class="list-heading"><span>船体规则</span></div>
+          <div class="form-grid"><label>稳定标识<input id="hullId" type="text" value="hull-starter"></label><label>中文名称<input id="hullDisplayName" type="text" value="初始护卫舰"></label><label>船体等级<input id="hullLevel" type="number" min="1" step="1" value="1"></label><label>网格宽度<input id="hullGridWidth" type="number" min="1" step="1" value="8"></label><label>网格高度<input id="hullGridHeight" type="number" min="1" step="1" value="4"></label><label>船员上限<input id="hullMaxCrew" type="number" min="0" step="1" value="6"></label><label>房间上限<input id="hullMaxRooms" type="number" min="1" step="1" value="8"></label><label>外观标识<input id="hullVisualId" type="text" value="visual-starter"></label><label class="wide-field">有效格 Mask（逐行 0/1，以逗号分隔）<input id="hullValidCells" type="text" value="1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"></label></div>
+          <div class="actions"><ui-button id="createHull" class="blue primary-action">创建船体定义</ui-button><ui-button id="saveHull">保存选中船体</ui-button><ui-button id="createShip">在挂载点创建飞船</ui-button></div>
+        </section>
+        <section class="panel-card asset-list-card"><div class="list-heading"><span>已发现船体</span></div><div id="hullList"></div></section>
       </section>
 
       <section id="pageRooms" class="page" hidden>
@@ -79,7 +89,7 @@ const template = `
         <section class="panel-card scene-card">
           <div class="list-heading"><span>新建船员资源</span></div>
           <div class="form-grid"><label>稳定标识<input id="newCrewId" type="text" value="crew-engineer"></label><label>中文名称<input id="newCrewDisplayName" type="text" value="工程师"></label><label>船员职业<select id="newCrewRole"><option value="ENGINEER">工程师</option><option value="GUNNER">武器操作员</option></select></label><label>最大生命<input id="newCrewMaxHp" type="number" min="1" step="1" value="100"></label><label>每段移动耗时（固定步）<input id="newCrewMoveTicks" type="number" min="1" step="1" value="5"></label><label>预制体名称<input id="newCrewPrefabName" type="text" value="EngineerCrew"></label></div>
-          <div class="actions"><ui-button id="createCrewTemplate">生成船员模板</ui-button><ui-button id="createCrewAsset" class="blue primary-action">创建船员规则与预制体</ui-button></div>
+          <div class="actions"><ui-button id="createCrewAsset" class="blue primary-action">创建船员规则与预制体</ui-button></div>
         </section>
         <div class="room-workspace crew-workspace"><section class="panel-card asset-list-card"><div class="list-heading"><span>已发现船员</span></div><div id="crewList"></div></section><aside id="crewInspector" class="panel-card inspector" hidden><div class="inspector-heading"><div><h3 id="crewEditTitle">船员属性</h3></div><span id="crewEditState" class="badge neutral">未修改</span></div><div class="asset-path"><span id="crewEditId">—</span><span id="crewEditPath">—</span></div><div id="crewInstanceInfo" class="instance-info" hidden></div><div class="form-grid"><label>中文名称<input id="crewEditDisplayName" type="text"></label><label>船员职业<select id="crewEditRole"><option value="ENGINEER">工程师</option><option value="GUNNER">武器操作员</option></select></label><label>最大生命<input id="crewEditMaxHp" type="number" min="1" step="1"></label><label>每段移动耗时（固定步）<input id="crewEditMoveTicks" type="number" min="1" step="1"></label></div><div class="inspector-actions"><ui-button id="saveCrew" class="blue primary-action">保存属性</ui-button><ui-button id="createSelectedCrew">创建实例</ui-button><ui-button id="openSelectedCrewPrefab">打开预制体</ui-button></div></aside><div id="crewEmpty" class="panel-card empty-state"><h3>选择一个船员资源</h3></div></div>
       </section>
@@ -108,6 +118,7 @@ const style = `
 .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 8px; }
 .form-grid label { gap:3px; }
 .form-grid input,.form-grid select { height:28px; padding:3px 7px; }
+.wide-field { grid-column:1 / -1; }
 .inspector-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:11px; }
 .inspector-actions ui-button,.inspector-actions .primary-action { box-sizing:border-box; width:100%; min-width:0; }
 .scene-inspector { margin-top:14px; padding-top:12px; border-top:1px solid var(--color-normal-border); }
@@ -133,16 +144,17 @@ module.exports = Editor.Panel.define({
   style,
   $: {
     selection: '#selection', target: '#target', sceneBadge: '#sceneBadge', roomCount: '#roomCount',
-    navWarningCount: '#navWarningCount', newRoom: '#newRoom', sync: '#sync', initialize: '#initialize', setupEnergy: '#setupEnergy', createPowerRowTemplate: '#createPowerRowTemplate', replacePowerRows: '#replacePowerRows', setupCrew: '#setupCrew', sceneRefresh: '#sceneRefresh',
+    navWarningCount: '#navWarningCount', newRoom: '#newRoom', sync: '#sync', sceneKind: '#sceneKind', initialize: '#initialize', createFoundation: '#createFoundation', mountSharedUi: '#mountSharedUi', wireFoundation: '#wireFoundation', sceneRefresh: '#sceneRefresh',
     refresh: '#refresh', list: '#list', status: '#status', roomSearch: '#roomSearch', roomCategories: '#roomCategories',
     roomInspector: '#roomInspector', roomEmpty: '#roomEmpty', roomInstanceInfo: '#roomInstanceInfo', editTitle: '#editTitle', editState: '#editState', editId: '#editId', editPath: '#editPath',
     editDisplayName: '#editDisplayName', editCategory: '#editCategory', editWidth: '#editWidth', editHeight: '#editHeight', editMaxLevel: '#editMaxLevel',
     editMaxHp: '#editMaxHp', editMinPower: '#editMinPower', editMaxPower: '#editMaxPower', editPowerGeneration: '#editPowerGeneration', editCrewCapacity: '#editCrewCapacity', saveRoom: '#saveRoom',
     createSelectedRoom: '#createSelectedRoom', openSelectedPrefab: '#openSelectedPrefab', validationSummary: '#validationSummary', validationList: '#validationList',
-    navScene: '#navScene', navRooms: '#navRooms', navCrew: '#navCrew', navValidation: '#navValidation',
-    pageScene: '#pageScene', pageRooms: '#pageRooms', pageCrew: '#pageCrew', pageValidation: '#pageValidation',
-    crewCount: '#crewCount', crewList: '#crewList', crewInspector: '#crewInspector', crewEmpty: '#crewEmpty', crewInstanceInfo: '#crewInstanceInfo', crewEditTitle: '#crewEditTitle', crewEditState: '#crewEditState', crewEditId: '#crewEditId', crewEditPath: '#crewEditPath', crewEditDisplayName: '#crewEditDisplayName', crewEditRole: '#crewEditRole', crewEditMaxHp: '#crewEditMaxHp', crewEditMoveTicks: '#crewEditMoveTicks', saveCrew: '#saveCrew', createSelectedCrew: '#createSelectedCrew', openSelectedCrewPrefab: '#openSelectedCrewPrefab', newCrewId: '#newCrewId', newCrewDisplayName: '#newCrewDisplayName', newCrewRole: '#newCrewRole', newCrewMaxHp: '#newCrewMaxHp', newCrewMoveTicks: '#newCrewMoveTicks', newCrewPrefabName: '#newCrewPrefabName', createCrewTemplate: '#createCrewTemplate', createCrewAsset: '#createCrewAsset',
-    sceneInspector: '#sceneInspector', sceneSelectionTitle: '#sceneSelectionTitle', sceneSelectionBadge: '#sceneSelectionBadge', sceneNodePath: '#sceneNodePath', sceneSemanticRole: '#sceneSemanticRole', sceneBaseInfo: '#sceneBaseInfo', sceneCoreForm: '#sceneCoreForm', sceneGridColumns: '#sceneGridColumns', sceneGridRows: '#sceneGridRows', sceneCellSize: '#sceneCellSize', sceneSnapRooms: '#sceneSnapRooms', sceneMinScale: '#sceneMinScale', sceneMaxScale: '#sceneMaxScale', sceneZoomStep: '#sceneZoomStep', saveSceneCore: '#saveSceneCore',
+    navScene: '#navScene', navHulls: '#navHulls', navRooms: '#navRooms', navCrew: '#navCrew', navValidation: '#navValidation',
+    pageScene: '#pageScene', pageHulls: '#pageHulls', pageRooms: '#pageRooms', pageCrew: '#pageCrew', pageValidation: '#pageValidation',
+    hullCount: '#hullCount', hullList: '#hullList', hullId: '#hullId', hullDisplayName: '#hullDisplayName', hullLevel: '#hullLevel', hullGridWidth: '#hullGridWidth', hullGridHeight: '#hullGridHeight', hullMaxCrew: '#hullMaxCrew', hullMaxRooms: '#hullMaxRooms', hullVisualId: '#hullVisualId', hullValidCells: '#hullValidCells', createHull: '#createHull', saveHull: '#saveHull', createShip: '#createShip',
+    crewCount: '#crewCount', crewList: '#crewList', crewInspector: '#crewInspector', crewEmpty: '#crewEmpty', crewInstanceInfo: '#crewInstanceInfo', crewEditTitle: '#crewEditTitle', crewEditState: '#crewEditState', crewEditId: '#crewEditId', crewEditPath: '#crewEditPath', crewEditDisplayName: '#crewEditDisplayName', crewEditRole: '#crewEditRole', crewEditMaxHp: '#crewEditMaxHp', crewEditMoveTicks: '#crewEditMoveTicks', saveCrew: '#saveCrew', createSelectedCrew: '#createSelectedCrew', openSelectedCrewPrefab: '#openSelectedCrewPrefab', newCrewId: '#newCrewId', newCrewDisplayName: '#newCrewDisplayName', newCrewRole: '#newCrewRole', newCrewMaxHp: '#newCrewMaxHp', newCrewMoveTicks: '#newCrewMoveTicks', newCrewPrefabName: '#newCrewPrefabName', createCrewAsset: '#createCrewAsset',
+    sceneInspector: '#sceneInspector', sceneSelectionTitle: '#sceneSelectionTitle', sceneSelectionBadge: '#sceneSelectionBadge', sceneNodePath: '#sceneNodePath', sceneSemanticRole: '#sceneSemanticRole', sceneBaseInfo: '#sceneBaseInfo',
   },
   listeners: {
     show() { startPolling?.(); },
@@ -158,10 +170,6 @@ module.exports = Editor.Panel.define({
     const newRoom = el<HTMLElement>('newRoom');
     const sync = el<HTMLElement>('sync');
     const initialize = el<HTMLElement>('initialize');
-    const setupEnergy = el<HTMLElement>('setupEnergy');
-    const createPowerRowTemplate = el<HTMLElement>('createPowerRowTemplate');
-    const replacePowerRows = el<HTMLElement>('replacePowerRows');
-    const setupCrew = el<HTMLElement>('setupCrew');
     const sceneRefresh = el<HTMLElement>('sceneRefresh');
     const refresh = el<HTMLElement>('refresh');
     const list = el<HTMLElement>('list');
@@ -186,9 +194,12 @@ module.exports = Editor.Panel.define({
     const sceneNodePath = el<HTMLElement>('sceneNodePath');
     const sceneSemanticRole = el<HTMLElement>('sceneSemanticRole');
     const sceneBaseInfo = el<HTMLElement>('sceneBaseInfo');
-    const sceneCoreForm = el<HTMLElement>('sceneCoreForm');
-    const saveSceneCore = el<HTMLElement>('saveSceneCore');
     const crewCount = el<HTMLElement>('crewCount');
+    const hullCount = el<HTMLElement>('hullCount');
+    const hullList = el<HTMLElement>('hullList');
+    const createHull = el<HTMLElement>('createHull');
+    const saveHull = el<HTMLElement>('saveHull');
+    const createShip = el<HTMLElement>('createShip');
     const crewList = el<HTMLElement>('crewList');
     const crewInspector = el<HTMLElement>('crewInspector');
     const crewEmpty = el<HTMLElement>('crewEmpty');
@@ -201,12 +212,11 @@ module.exports = Editor.Panel.define({
     const createSelectedCrew = el<HTMLElement>('createSelectedCrew');
     const openSelectedCrewPrefab = el<HTMLElement>('openSelectedCrewPrefab');
     const createCrewAsset = el<HTMLElement>('createCrewAsset');
-    const createCrewTemplate = el<HTMLElement>('createCrewTemplate');
     const pages: Record<PageId, HTMLElement> = {
-      scene: el('pageScene'), rooms: el('pageRooms'), crew: el('pageCrew'), validation: el('pageValidation'),
+      scene: el('pageScene'), hulls: el('pageHulls'), rooms: el('pageRooms'), crew: el('pageCrew'), validation: el('pageValidation'),
     };
     const nav: Record<PageId, HTMLElement> = {
-      scene: el('navScene'), rooms: el('navRooms'), crew: el('navCrew'), validation: el('navValidation'),
+      scene: el('navScene'), hulls: el('navHulls'), rooms: el('navRooms'), crew: el('navCrew'), validation: el('navValidation'),
     };
     const field = (key: string): HTMLInputElement | HTMLSelectElement => el<HTMLInputElement | HTMLSelectElement>(key);
     const input = (key: string): HTMLInputElement => el<HTMLInputElement>(key);
@@ -219,6 +229,8 @@ module.exports = Editor.Panel.define({
     let roomEntries: readonly RoomPrefabCatalogEntry[] = [];
     let selectedCrewId = '';
     let crewEntries: readonly CrewPrefabCatalogEntry[] = [];
+    let hullEntries: readonly HullCatalogEntry[] = [];
+    let selectedHullId = '';
 
     const showStatus = (message: string, ok?: boolean): void => {
       status.className = `visible ${ok === undefined ? 'info' : ok ? 'ok' : 'error'}`;
@@ -328,8 +340,48 @@ module.exports = Editor.Panel.define({
       renderCrewInspector();
     };
 
+    const readHullInput = (): HullDefinitionInput => ({
+      id: field('hullId').value.trim(),
+      displayName: field('hullDisplayName').value.trim(),
+      level: Number(field('hullLevel').value),
+      gridWidth: Number(field('hullGridWidth').value),
+      gridHeight: Number(field('hullGridHeight').value),
+      validCells: field('hullValidCells').value.split(',').map((value) => Number(value.trim())),
+      maxCrew: Number(field('hullMaxCrew').value),
+      maxRooms: Number(field('hullMaxRooms').value),
+      visualId: field('hullVisualId').value.trim(),
+    });
+
+    const loadHullForm = (entry: HullCatalogEntry): void => {
+      selectedHullId = entry.id;
+      field('hullId').value = entry.id;
+      field('hullDisplayName').value = entry.displayName;
+      field('hullLevel').value = String(entry.level);
+      field('hullGridWidth').value = String(entry.gridWidth);
+      field('hullGridHeight').value = String(entry.gridHeight);
+      field('hullMaxCrew').value = String(entry.maxCrew);
+      field('hullMaxRooms').value = String(entry.maxRooms);
+      field('hullVisualId').value = entry.visualId;
+      field('hullValidCells').value = entry.validCells.join(',');
+    };
+
+    const renderHullList = (): void => {
+      hullList.replaceChildren();
+      for (const entry of hullEntries) {
+        const row = document.createElement('div');
+        row.className = `room${selectedHullId === entry.id ? ' selected' : ''}`;
+        row.addEventListener('click', () => { loadHullForm(entry); renderHullList(); });
+        const main = document.createElement('div'); main.className = 'room-main';
+        const name = document.createElement('span'); name.className = 'room-name'; name.textContent = entry.displayName;
+        const meta = document.createElement('div'); meta.className = 'room-meta';
+        for (const text of [`${entry.gridWidth} × ${entry.gridHeight} 格`, `船员 ${entry.maxCrew}`, entry.id]) { const item = document.createElement('span'); item.textContent = text; meta.append(item); }
+        main.append(name, meta); row.append(main); hullList.append(row);
+      }
+      if (hullEntries.length === 0) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '暂无船体定义'; hullList.append(empty); }
+    };
+
     const renderSceneInspector = (selectionValue: AuthoringSelection): void => {
-      sceneInspector.hidden = selectionValue.kind === 'room-instance' || selectionValue.kind === 'crew-instance';
+      sceneInspector.hidden = selectionValue.kind === 'room-instance' || selectionValue.kind === 'crew-instance' || selectionValue.kind === 'ship-instance';
       sceneBaseInfo.replaceChildren();
       sceneNodePath.textContent = selectionValue.path ?? '—';
       sceneSemanticRole.textContent = selectionValue.kind === 'semantic-node' ? translateSemanticRole(selectionValue.semanticRole) : selectionValue.typeId;
@@ -337,31 +389,18 @@ module.exports = Editor.Panel.define({
         sceneSelectionTitle.textContent = '未选择节点';
         sceneSelectionBadge.textContent = '等待选择';
         sceneSelectionBadge.className = 'badge neutral';
-        sceneCoreForm.hidden = true;
         return;
       }
       sceneSelectionTitle.textContent = selectionValue.name ?? '节点属性';
-      sceneSelectionBadge.textContent = selectionValue.kind === 'scene-settings' ? '可编辑' : '只读';
-      sceneSelectionBadge.className = `badge ${selectionValue.kind === 'scene-settings' ? 'ok' : 'neutral'}`;
+      sceneSelectionBadge.textContent = '只读';
+      sceneSelectionBadge.className = 'badge neutral';
       appendInfo(sceneBaseInfo, '节点名称', selectionValue.name ?? '未命名');
       appendInfo(sceneBaseInfo, '本地位置', formatPosition(selectionValue.position));
-      if (selectionValue.kind !== 'scene-settings') {
-        sceneCoreForm.hidden = true;
-        return;
-      }
-      sceneCoreForm.hidden = false;
-      input('sceneGridColumns').value = String(selectionValue.core.gridColumns);
-      input('sceneGridRows').value = String(selectionValue.core.gridRows);
-      input('sceneCellSize').value = String(selectionValue.core.cellSize);
-      input('sceneSnapRooms').checked = selectionValue.core.snapRoomsInEditor;
-      input('sceneMinScale').value = String(selectionValue.core.minScale);
-      input('sceneMaxScale').value = String(selectionValue.core.maxScale);
-      input('sceneZoomStep').value = String(selectionValue.core.zoomStep);
     };
 
     const render = (next: AuthoringState): void => {
       const previousUuid = state?.selection.uuid;
-      state = next; roomEntries = next.rooms; crewEntries = next.crews ?? [];
+      state = next; roomEntries = next.rooms; crewEntries = next.crews ?? []; hullEntries = next.hulls ?? [];
       if (next.selection.uuid !== previousUuid) {
         if (next.selection.kind === 'room-instance') {
           selectedRoomId = next.selection.definitionId ?? '';
@@ -369,6 +408,9 @@ module.exports = Editor.Panel.define({
         } else if (next.selection.kind === 'crew-instance') {
           selectedCrewId = next.selection.definitionId ?? '';
           activePage = 'crew';
+        } else if (next.selection.kind === 'ship-instance') {
+          selectedHullId = next.selection.hullDefinitionId ?? '';
+          activePage = 'hulls';
         } else {
           activePage = 'scene';
         }
@@ -376,7 +418,7 @@ module.exports = Editor.Panel.define({
       selection.textContent = next.selection.uuid === undefined ? '未选择节点' : next.selection.name ?? '未命名节点'; selection.className = next.selection.uuid === undefined ? 'value muted' : 'value'; selection.title = next.selection.path ?? next.selection.name ?? '';
       const placementMode = next.roomTarget.mode ?? (next.roomTarget.ok ? 'grid' : 'blocked');
       const placementLabel = placementMode === 'grid' ? '网格放置' : placementMode === 'canvas' ? '画布顶层放置' : placementMode === 'scene-root' ? '场景顶层放置' : '需要处理';
-      target.textContent = next.roomTarget.ok ? `${placementLabel}：${next.roomTarget.path ?? '未命名目标'}` : next.roomTarget.message; target.className = next.roomTarget.ok ? 'value' : 'value muted'; target.title = next.roomTarget.path ?? next.roomTarget.message; sceneBadge.textContent = next.roomTarget.ok ? placementLabel : '需要处理'; sceneBadge.className = `badge ${next.roomTarget.ok ? 'ok' : 'warn'}`; roomCount.textContent = `${next.rooms.length} 个`; crewCount.textContent = `${crewEntries.length} 个`; navWarningCount.textContent = String(next.warnings.length); sync.innerHTML = '<i></i>已同步'; initialize.removeAttribute('disabled'); renderCategories(); renderRoomList(); renderCrewList(); renderSceneInspector(next.selection); renderValidation(next); setPage(activePage);
+      target.textContent = next.roomTarget.ok ? `${placementLabel}：${next.roomTarget.path ?? '未命名目标'}` : next.roomTarget.message; target.className = next.roomTarget.ok ? 'value' : 'value muted'; target.title = next.roomTarget.path ?? next.roomTarget.message; sceneBadge.textContent = next.roomTarget.ok ? placementLabel : '需要处理'; sceneBadge.className = `badge ${next.roomTarget.ok ? 'ok' : 'warn'}`; roomCount.textContent = `${next.rooms.length} 个`; crewCount.textContent = `${crewEntries.length} 个`; hullCount.textContent = `${hullEntries.length} 个`; navWarningCount.textContent = String(next.warnings.length); sync.innerHTML = '<i></i>已同步'; initialize.removeAttribute('disabled'); renderCategories(); renderHullList(); renderRoomList(); renderCrewList(); renderSceneInspector(next.selection); renderValidation(next); setPage(activePage);
     };
 
     const refreshState = async (force: boolean, refreshCatalog: boolean = force): Promise<void> => {
@@ -407,7 +449,14 @@ module.exports = Editor.Panel.define({
       targetDirectory: DEFAULT_PREFAB_DIRECTORY,
     });
 
-    const readSceneCoreRequest = (): AuthoringSceneSettingsSelection | null => state?.selection.kind === 'scene-settings' ? state.selection : null;
+    const runSceneAction = async (message: string, progress: string): Promise<void> => {
+      showStatus(progress);
+      try {
+        const result = await Editor.Message.request(PACKAGE_NAME, message, field('sceneKind').value) as { ok: boolean; message: string };
+        showStatus(result.message, result.ok);
+        await refreshState(true);
+      } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); }
+    };
 
     for (const [page, button] of Object.entries(nav) as [PageId, HTMLElement][]) button.addEventListener('click', () => setPage(page));
     for (const key of ['editDisplayName', 'editCategory', 'editWidth', 'editHeight', 'editMaxLevel', 'editMaxHp', 'editMinPower', 'editMaxPower', 'editPowerGeneration', 'editCrewCapacity']) {
@@ -421,39 +470,28 @@ module.exports = Editor.Panel.define({
     if (broadcastMessage?.addBroadcastListener !== undefined) {
       broadcastMessage.addBroadcastListener(ROOM_CATALOG_CHANGE_MESSAGE, onRoomCatalogChange);
       broadcastMessage.addBroadcastListener(CREW_CATALOG_CHANGE_MESSAGE, onRoomCatalogChange);
+      broadcastMessage.addBroadcastListener(HULL_CATALOG_CHANGE_MESSAGE, onRoomCatalogChange);
       stopCatalogListening = () => {
         broadcastMessage.removeBroadcastListener?.(ROOM_CATALOG_CHANGE_MESSAGE, onRoomCatalogChange);
         broadcastMessage.removeBroadcastListener?.(CREW_CATALOG_CHANGE_MESSAGE, onRoomCatalogChange);
+        broadcastMessage.removeBroadcastListener?.(HULL_CATALOG_CHANGE_MESSAGE, onRoomCatalogChange);
         stopCatalogListening = undefined;
       };
     }
     saveRoom.addEventListener('confirm', async () => { const request = readEditRequest(); if (request === null) return; editState.textContent = '保存中…'; try { const result = await Editor.Message.request(PACKAGE_NAME, 'update-room-definition', request) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) { editState.textContent = '已保存'; await refreshState(true); } else editState.textContent = '校验失败'; } catch (cause) { editState.textContent = '保存失败'; showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
     saveCrew.addEventListener('confirm', async () => { const request = readCrewEditRequest(); if (request === null) return; crewEditState.textContent = '保存中…'; try { const result = await Editor.Message.request(PACKAGE_NAME, 'update-crew-definition', request) as { ok: boolean; message: string }; showStatus(result.message, result.ok); crewEditState.textContent = result.ok ? '已保存' : '校验失败'; if (result.ok) await refreshState(true); } catch (cause) { crewEditState.textContent = '保存失败'; showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
     createCrewAsset.addEventListener('confirm', async () => { showStatus('正在创建船员规则与预制体…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-content', readCrewCreationRequest()) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    createCrewTemplate.addEventListener('confirm', async () => { showStatus('正在通过 Creator 创建船员模板…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-member-template') as { ok: boolean; message: string }; showStatus(result.message, result.ok); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    createHull.addEventListener('confirm', async () => { showStatus('正在创建船体定义…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-hull-definition', readHullInput()) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    saveHull.addEventListener('confirm', async () => { const entry = hullEntries.find((item) => item.id === selectedHullId); if (entry === undefined) { showStatus('请先选择一个船体定义', false); return; } showStatus('正在保存船体定义…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'update-hull-definition', { ...readHullInput(), id: entry.id, configUrl: entry.configUrl }) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    createShip.addEventListener('confirm', async () => { const entry = hullEntries.find((item) => item.id === selectedHullId); if (entry === undefined) { showStatus('请先选择一个船体定义', false); return; } showStatus('正在创建飞船实例…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-ship-instance', entry) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
     createSelectedCrew.addEventListener('confirm', async () => { const entry = crewEntries.find((item) => item.id === selectedCrewId); if (entry === undefined) return; showStatus(`正在创建 ${entry.displayName} 实例…`); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-instance', entry) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
     openSelectedCrewPrefab.addEventListener('confirm', () => { const entry = crewEntries.find((item) => item.id === selectedCrewId); if (entry !== undefined) Editor.Message.send(PACKAGE_NAME, 'open-created-prefab', entry.prefabUrl); });
-    saveSceneCore.addEventListener('confirm', async () => {
-      if (readSceneCoreRequest() === null) return;
-      const request = { gridColumns: Number(input('sceneGridColumns').value), gridRows: Number(input('sceneGridRows').value), cellSize: Number(input('sceneCellSize').value), snapRoomsInEditor: input('sceneSnapRooms').checked, minScale: Number(input('sceneMinScale').value), maxScale: Number(input('sceneMaxScale').value), zoomStep: Number(input('sceneZoomStep').value) };
-      saveSceneCore.setAttribute('disabled', 'true');
-      try {
-        const result = await Editor.Message.request(PACKAGE_NAME, 'update-scene-core-settings', request) as { ok: boolean; message: string };
-        showStatus(result.message, result.ok);
-        if (result.ok) await refreshState(true);
-      } catch (cause) {
-        showStatus(cause instanceof Error ? cause.message : String(cause), false);
-      } finally {
-        saveSceneCore.removeAttribute('disabled');
-      }
-    });
     createSelectedRoom.addEventListener('confirm', () => { const entry = roomEntries.find((item) => item.id === selectedRoomId); if (entry === undefined) return; void (async () => { showStatus(`正在创建 ${entry.displayName}…`); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-room-instance', entry) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } })(); });
     openSelectedPrefab.addEventListener('confirm', () => { const entry = roomEntries.find((item) => item.id === selectedRoomId); if (entry !== undefined) Editor.Message.send(PACKAGE_NAME, 'open-created-prefab', entry.prefabUrl); });
-    initialize.addEventListener('confirm', async () => { showStatus('正在初始化 Prototype 场景骨架…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'initialize-prototype-scene') as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    setupEnergy.addEventListener('confirm', async () => { showStatus('正在持久化 R1 能源界面与房间外观…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'configure-r1-energy-scene') as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    createPowerRowTemplate.addEventListener('confirm', async () => { showStatus('正在通过 Creator 创建能源行预制体…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-power-room-row-template') as { ok: boolean; message: string }; showStatus(result.message, result.ok); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    replacePowerRows.addEventListener('confirm', async () => { showStatus('正在把两条能源行替换为预制体实例…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'replace-power-rows-with-prefab') as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    setupCrew.addEventListener('confirm', async () => { showStatus('正在持久化 R1 船员层与状态面板…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'configure-r1-crew-scene') as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    initialize.addEventListener('confirm', async () => { const kind = field('sceneKind').value; const kindName = kind === 'BOOT' ? '启动场景' : kind === 'MAIN' ? '主场景' : '战斗场景'; showStatus(`正在初始化${kindName}中文骨架…`); try { const result = await Editor.Message.request(PACKAGE_NAME, 'initialize-scene-skeleton', kind) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    field('createFoundation').addEventListener('confirm', () => { void runSceneAction('create-foundation-prefabs', '正在创建共享 UIRoot、页面和 ShipView Prefab…'); });
+    field('mountSharedUi').addEventListener('confirm', () => { void runSceneAction('mount-shared-ui', '正在挂载共享 UIRoot Prefab…'); });
+    field('wireFoundation').addEventListener('confirm', () => { void runSceneAction('wire-scene-foundation', '正在连接场景持久引用…'); });
     sceneRefresh.addEventListener('confirm', () => { void refreshState(true); }); refresh.addEventListener('confirm', () => { void refreshState(true); });
     newRoom.addEventListener('confirm', () => Editor.Message.send(PACKAGE_NAME, 'open-room-create', { targetDirectory: DEFAULT_PREFAB_DIRECTORY, templateUrl: DEFAULT_TEMPLATE_URL }));
     setPage('scene'); renderCategories();
@@ -481,7 +519,7 @@ function translateCategory(category: string): string { return ({ ENERGY: '能源
 function translateCrewRole(role: string): string { return ({ ENGINEER: '工程师', GUNNER: '武器操作员' } as Record<string, string>)[role] ?? role; }
 
 function translateSemanticRole(role: string): string {
-  return ({ mainCamera: '主相机', canvas: '画布', background: '背景层', worldRoot: '世界根', shipRoot: '飞船根', gridRoot: '网格根', roomRoot: '房间容器', crewRoot: '船员层', previewRoot: '预览根', uiRoot: '界面根', hudLayer: 'HUD层', appRoot: '应用根' } as Record<string, string>)[role] ?? role;
+  return ({ mainCamera: '主相机', canvas: '画布', worldRoot: '世界根', currentShipMount: '当前飞船挂载点', playerShipMount: '我方飞船挂载点', enemyShipMount: '敌方飞船挂载点', shipView: '飞船视图', gridRoot: '网格根', roomRoot: '房间容器', crewRoot: '船员层', effectRoot: '特效层', projectileRoot: '弹道层', battleEnvironment: '战斗环境', uiRoot: '界面根', appRoot: '应用根' } as Record<string, string>)[role] ?? role;
 }
 
 function formatPosition(position: { readonly x?: number; readonly y?: number; readonly z?: number } | undefined): string {

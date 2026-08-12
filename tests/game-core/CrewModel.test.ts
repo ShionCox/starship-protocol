@@ -15,10 +15,10 @@ function room(id: string, category: RoomDefinition['category'], crewCapacity: nu
 }
 
 const PLACEMENTS: readonly RoomPlacement[] = [
-  { id: 'room-reactor-1', x: 0, y: 0, width: 2, height: 2 },
-  { id: 'room-elevator-1', x: 2, y: 0, width: 2, height: 2 },
-  { id: 'room-laser-1', x: 4, y: 0, width: 2, height: 2 },
-  { id: 'room-shield-1', x: 6, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-reactor-1', definitionId: 'room-reactor', x: 0, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-elevator-1', definitionId: 'room-elevator', x: 2, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-laser-1', definitionId: 'room-laser', x: 4, y: 0, width: 2, height: 2 },
+  { instanceId: 'room-shield-1', definitionId: 'room-shield', x: 6, y: 0, width: 2, height: 2 },
 ];
 const DEFINITIONS = new Map<string, RoomDefinition>([
   ['room-reactor-1', room('room-reactor-1', 'ENERGY', 2)],

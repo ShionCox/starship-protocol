@@ -1,5 +1,7 @@
 # R2-SEC-007：Windows 加密 Release 与发行审计证据
 
+> 历史实验记录：发布工具与 Native 样例已在 2026-08-12 删除，且从未具备生产证书/KMS/TLS。未来 R2 必须重新生成当前证据。
+
 - 日期：2026-08-09
 - 范围：Creator 3.8.8 Windows Native 脚本加密、生成目录规则清理、MSVC Release 和静态审计
 - 结论：脚本加密与发行审计子项已验证；正式 `.spcfg` 尚未由 Secret/KMS 生成并加入签名清单，因此 R2-SEC-007 主项保持未勾选。

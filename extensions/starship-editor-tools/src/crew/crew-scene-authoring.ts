@@ -1,5 +1,5 @@
 import type { SceneSelectionContext } from '../contracts';
-import { isPrototypeSceneNodeName } from '../scene/prototype-scene-names';
+import { isSceneNodeName } from '../scene/scene-names';
 import {
   componentTypeMatches,
   getSceneComponentTarget,
@@ -11,31 +11,29 @@ import {
 } from '../shared/editor-scene';
 import type { CrewPrefabCatalogEntry } from './discover-crew-prefabs';
 
-const TARGET_ROOM_INSTANCE_ID = 'room-reactor-1';
-
-/** 船员场景实例化只允许进入唯一“船员层”，并保持 Prefab 关联和单次 Undo。 */
+/** 船员场景实例化只进入所选房间所属飞船的“船员层”，并保持 Prefab 关联和单次 Undo。 */
 export async function createCrewInstance(
   scene: SceneQueryPort,
-  _context: SceneSelectionContext,
+  context: SceneSelectionContext,
   entry: CrewPrefabCatalogEntry,
 ): Promise<{ readonly ok: boolean; readonly message: string; readonly nodeUuid?: string }> {
   const tree = await scene.queryNodeTree();
   const classes = scene.queryComponents === undefined ? [] : await scene.queryComponents().catch(() => []);
-  const roots = flattenTree(tree).filter((node) => isPrototypeSceneNodeName(node.name, 'crewRoot'));
-  if (roots.length !== 1 || roots[0].uuid === undefined) return { ok: false, message: roots.length === 0 ? '场景缺少“船员层”，请先补齐 R1 船员场景' : '场景存在多个“船员层”，无法安全创建' };
-  const targetRoom = await resolveTargetRoom(scene, tree, classes);
+  const targetRoom = await resolveTargetRoom(scene, tree, classes, context);
   if (targetRoom.ok === false) return targetRoom;
-  const occupiedStations = await collectCrewStations(scene, tree, classes, targetRoom.roomInstanceId, targetRoom.crewCapacity);
+  const crewRoot = resolveOwningCrewRoot(tree, targetRoom.roomNodeUuid, classes);
+  if (crewRoot?.uuid === undefined) return { ok: false, message: '所选房间所属飞船缺少“船员层”' };
+  const occupiedStations = await collectCrewStations(scene, crewRoot, classes, targetRoom.roomInstanceId, targetRoom.crewCapacity);
   if (occupiedStations.ok === false) return occupiedStations;
   const stationIndex = findFirstFreeStation(targetRoom.crewCapacity, occupiedStations.stationIndexes);
   if (stationIndex === null) return { ok: false, message: `目标房间已满：${targetRoom.roomInstanceId}` };
-  const existingIds = await collectCrewInstanceIds(scene, tree, classes);
+  const existingIds = await collectCrewInstanceIds(scene, crewRoot, classes);
   const instanceId = nextCrewInstanceId(entry.id, existingIds);
   let createdUuid: string | undefined;
   let undoId: string | undefined;
   try {
-    undoId = await scene.beginRecording(roots[0].uuid);
-    const created = await scene.createNode({ parent: roots[0].uuid, name: `船员-${entry.displayName}`, assetUuid: entry.prefabUuid, type: 'cc.Prefab', position: { x: 0, y: 0, z: 20 }, unlinkPrefab: false });
+    undoId = await scene.beginRecording(crewRoot.uuid);
+    const created = await scene.createNode({ parent: crewRoot.uuid, name: `船员-${entry.displayName}`, assetUuid: entry.prefabUuid, type: 'cc.Prefab', position: { x: 0, y: 0, z: 20 }, unlinkPrefab: false });
     createdUuid = created?.uuid;
     if (createdUuid === undefined) throw new Error(`创建船员 Prefab 失败：${entry.prefabUrl}`);
     if ((await scene.queryNodesByAssetUuid(entry.prefabUuid)).indexOf(createdUuid) === -1) throw new Error('创建结果未保留船员 Prefab 关联');
@@ -64,6 +62,7 @@ interface TargetRoom {
   readonly ok: true;
   readonly roomInstanceId: string;
   readonly crewCapacity: number;
+  readonly roomNodeUuid: string;
 }
 
 interface TargetRoomFailure {
@@ -85,27 +84,39 @@ async function resolveTargetRoom(
   scene: SceneQueryPort,
   tree: SceneNodeTree,
   classes: readonly SceneComponentClassInfo[],
+  context: SceneSelectionContext,
 ): Promise<TargetRoom | TargetRoomFailure> {
-  for (const node of flattenTree(tree)) {
-    const component = findComponent(node, 'RoomView', classes);
-    const componentUuid = getSceneComponentUuid(component);
-    if (componentUuid === undefined) continue;
-    let state = await readComponentState(scene, componentUuid, 'getAuthoringInspectorState');
-    if (readString(state, 'roomInstanceId') === undefined) {
-      state = await readComponentState(scene, componentUuid, 'query-component');
-    }
-    const roomInstanceId = readString(state, 'roomInstanceId');
-    if (roomInstanceId !== TARGET_ROOM_INSTANCE_ID) continue;
-    if (state !== undefined && readBoolean(state, 'ok') === false) {
-      return { ok: false, message: `目标房间校验失败：${readString(state, 'message') ?? '房间实例无效'}` };
-    }
-    const crewCapacity = readInteger(state, 'crewCapacity');
-    if (crewCapacity === undefined || crewCapacity < 0) {
-      return { ok: false, message: `目标房间容量无效：${TARGET_ROOM_INSTANCE_ID}` };
-    }
-    return { ok: true, roomInstanceId, crewCapacity };
+  const nodes = flattenTree(tree);
+  const byUuid = new Map(nodes.filter((node) => node.uuid !== undefined).map((node) => [node.uuid as string, node]));
+  let roomNode = context.nodeUuid === undefined ? undefined : byUuid.get(context.nodeUuid);
+  while (roomNode !== undefined && findComponent(roomNode, 'RoomView', classes) === null) {
+    roomNode = roomNode.parent === undefined ? undefined : byUuid.get(roomNode.parent);
   }
-  return { ok: false, message: `目标房间不存在：${TARGET_ROOM_INSTANCE_ID}` };
+  if (roomNode?.uuid === undefined) return { ok: false, message: '请先在层级管理器中选择目标房间实例' };
+  const component = findComponent(roomNode, 'RoomView', classes);
+  const componentUuid = getSceneComponentUuid(component);
+  if (componentUuid === undefined) return { ok: false, message: '所选节点缺少可读取的房间视图组件' };
+  const state = await readComponentState(scene, componentUuid, 'getAuthoringInspectorState');
+  const roomInstanceId = readString(state, 'roomInstanceId');
+  if (roomInstanceId === undefined) return { ok: false, message: '所选房间实例标识为空' };
+  if (readBoolean(state, 'ok') === false) return { ok: false, message: `目标房间校验失败：${readString(state, 'message') ?? '房间实例无效'}` };
+  const crewCapacity = readInteger(state, 'crewCapacity');
+  if (crewCapacity === undefined || crewCapacity <= 0) return { ok: false, message: `目标房间没有可用船员站位：${roomInstanceId}` };
+  return { ok: true, roomInstanceId, crewCapacity, roomNodeUuid: roomNode.uuid };
+}
+
+function resolveOwningCrewRoot(
+  tree: SceneNodeTree,
+  roomNodeUuid: string,
+  classes: readonly SceneComponentClassInfo[],
+): SceneNodeTree | null {
+  const nodes = flattenTree(tree);
+  const byUuid = new Map(nodes.filter((node) => node.uuid !== undefined).map((node) => [node.uuid as string, node]));
+  let cursor = byUuid.get(roomNodeUuid);
+  while (cursor !== undefined && findComponent(cursor, 'ShipView', classes) === null) {
+    cursor = cursor.parent === undefined ? undefined : byUuid.get(cursor.parent);
+  }
+  return cursor?.children?.find((node) => isSceneNodeName(node.name, 'crewRoot')) ?? null;
 }
 
 async function collectCrewStations(

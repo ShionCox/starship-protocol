@@ -3,94 +3,78 @@ const test = require('node:test');
 
 const { createCrewInstance } = require('../dist/crew/crew-scene-authoring.js');
 
-const ENTRY = { schemaVersion: 1, id: 'crew-engineer', displayName: '工程师', role: 'ENGINEER', maxHp: 100, moveTicksPerEdge: 5, prefabUrl: 'db://assets/prefabs/EngineerCrew.prefab', prefabUuid: 'crew-prefab', configUrl: 'db://assets/config/crew/crew-engineer.json', configUuid: 'crew-config' };
+const entry = { id: 'crew-engineer', displayName: '工程师', role: 'ENGINEER', prefabUrl: 'db://assets/prefabs/EngineerCrew.prefab', prefabUuid: 'crew-prefab' };
 
-function scene({ placed = true, capacity = 2, occupied = [], includeTargetRoom = true } = {}) {
+function portWithOccupied(occupied = [], placementSucceeds = true) {
+  const crewChildren = occupied.map((stationIndex, index) => ({ uuid: `crew-${index}`, name: `船员-${index}`, parent: 'crew-root', components: [{ type: 'CrewView', uuid: `crew-view-${index}` }], children: [] }));
+  const tree = { uuid: 'scene', name: 'MainScene', children: [{ uuid: 'ship', name: '飞船视图', parent: 'scene', components: [{ type: 'ShipView', uuid: 'ship-view' }], children: [
+    { uuid: 'rooms', name: '房间容器', parent: 'ship', children: [{ uuid: 'room-node', name: '房间-反应堆', parent: 'rooms', components: [{ type: 'RoomView', uuid: 'room-view' }], children: [] }] },
+    { uuid: 'crew-root', name: '船员层', parent: 'ship', children: crewChildren },
+  ] }] };
   const calls = [];
   let created = false;
-  const crewNodes = occupied.map((stationIndex, index) => ({
-    uuid: `existing-crew-${index}`,
-    name: `船员-已有${index + 1}`,
-    components: [{ type: 'CrewView', uuid: `existing-crew-view-${index}`, nodeUuid: `existing-crew-${index}`, index: 0 }],
-    children: [],
-  }));
   return {
     calls,
     async queryNodeTree() {
-      return {
-        uuid: 'scene',
-        name: 'PrototypeScene',
-        children: [
-          { uuid: 'crew-root', name: '船员层', children: created ? [...crewNodes, { uuid: 'crew-node', name: '船员-工程师', components: [{ type: 'CrewView', uuid: 'crew-view', nodeUuid: 'crew-node', index: 0 }], children: [] }] : crewNodes },
-          ...(includeTargetRoom ? [{ uuid: 'room-node', name: '房间-反应堆', components: [{ type: 'RoomView', uuid: 'room-view', nodeUuid: 'room-node', index: 0 }], children: [] }] : []),
-        ],
-      };
+      if (created && !tree.children[0].children[1].children.some((node) => node.uuid === 'crew-new')) tree.children[0].children[1].children.push({ uuid: 'crew-new', name: '船员-工程师', parent: 'crew-root', components: [{ type: 'CrewView', uuid: 'crew-view-new' }], children: [] });
+      return tree;
     },
     async queryComponents() { return []; },
-    async beginRecording(uuid) { calls.push(['begin', uuid]); return 'undo'; },
-    async createNode(options) { calls.push(['create', options]); created = true; return { uuid: 'crew-node' }; },
-    async queryNodesByAssetUuid() { return ['crew-node']; },
-    async queryComponent(uuid) {
-      if (uuid === 'room-view') return { value: { roomInstanceId: 'room-reactor-1', crewCapacity: capacity } };
-      const index = occupied[Number(uuid.split('-').at(-1))];
-      return index === undefined ? { value: {} } : { value: { crewInstanceId: `existing-${index}`, initialRoomInstanceId: 'room-reactor-1', initialStationIndex: index } };
+    async queryComponent(uuid) { const index = Number(uuid.split('-').at(-1)); return Number.isInteger(index) ? { value: { crewInstanceId: { value: `crew-engineer-${index + 1}` } } } : null; },
+    async executeComponentMethod(uuid, method) {
+      if (uuid === 'room-view') return { ok: true, message: '有效', roomInstanceId: 'room-reactor-1', crewCapacity: 2 };
+      if (uuid === 'crew-view-new' && method === 'applyEditorInitialPlacement') return placementSucceeds;
+      const index = Number(uuid.split('-').at(-1));
+      if (Number.isInteger(index)) return { ok: true, message: '有效', crewInstanceId: `crew-engineer-${index + 1}`, initialRoomInstanceId: 'room-reactor-1', initialStationIndex: occupied[index] };
+      return undefined;
     },
-    async setProperty(_target, path, value, options) { calls.push(['set', path, value, options]); return true; },
-    async executeComponentMethod(uuid, name) {
-      calls.push(['execute', uuid, name]);
-      if (uuid === 'room-view' && name === 'getAuthoringInspectorState') return { ok: true, message: '有效', roomInstanceId: 'room-reactor-1', crewCapacity: capacity };
-      if (name === 'getAuthoringInspectorState' && uuid.startsWith('existing-crew-view-')) {
-        const index = occupied[Number(uuid.split('-').at(-1))];
-        return { ok: true, message: '有效', crewInstanceId: `existing-${index}`, initialRoomInstanceId: 'room-reactor-1', initialStationIndex: index };
-      }
-      return placed;
-    },
-    async endRecording(id) { calls.push(['end', id]); },
-    async cancelRecording(id) { calls.push(['cancel', id]); },
-    async removeNode(uuid) { calls.push(['remove', uuid]); },
+    async createNode() { created = true; calls.push(['create']); return { uuid: 'crew-new' }; },
+    async queryNodesByAssetUuid() { return ['crew-new']; },
+    async setProperty(target, path, value) { calls.push(['set', path, value]); return true; },
+    async beginRecording() { calls.push(['begin']); return 'undo-crew'; },
+    async endRecording() { calls.push(['end']); },
+    async cancelRecording() { calls.push(['cancel']); },
+    async removeNode() { calls.push(['remove']); },
     async snapshotAbort() { calls.push(['abort']); },
   };
 }
 
-test('船员 Prefab 实例按目标房间最低空闲站位保留关联并形成一次 Undo', async () => {
+test('所选房间所属飞船内连续创建船员分配最低空闲站位', async () => {
   global.Editor = { Selection: { select() {} } };
-  const port = scene({ occupied: [1] });
-  const result = await createCrewInstance(port, {}, ENTRY);
-  assert.equal(result.ok, true);
-  assert.deepEqual(port.calls.filter(([name]) => name === 'begin' || name === 'end'), [['begin', 'crew-root'], ['end', 'undo']]);
-  assert.deepEqual(port.calls.filter(([name]) => name === 'set').map((call) => [call[1], call[2]]), [['crewInstanceId', 'crew-engineer-1'], ['initialRoomInstanceId', 'room-reactor-1'], ['initialStationIndex', 0]]);
+  const first = portWithOccupied([]);
+  const firstResult = await createCrewInstance(first, { nodeUuid: 'room-node' }, entry);
+  assert.equal(firstResult.ok, true);
+  assert.equal(first.calls.some((call) => call[0] === 'set' && call[1] === 'initialStationIndex' && call[2] === 0), true);
+  const second = portWithOccupied([0]);
+  const secondResult = await createCrewInstance(second, { nodeUuid: 'room-node' }, entry);
+  assert.equal(secondResult.ok, true);
+  assert.equal(second.calls.some((call) => call[0] === 'set' && call[1] === 'initialStationIndex' && call[2] === 1), true);
   delete global.Editor;
 });
 
-test('船员创建不按职业写死站位，而是选择最小空闲索引', async () => {
-  const port = scene({ occupied: [0] });
-  const result = await createCrewInstance(port, {}, { ...ENTRY, role: 'GUNNER', id: 'crew-gunner' });
-  assert.equal(result.ok, true);
-  assert.equal(port.calls.some(([name, path, value]) => name === 'set' && path === 'initialStationIndex' && value === 1), true);
-});
-
-test('目标房间满员时在 Undo 和 createNode 前失败', async () => {
-  const port = scene({ capacity: 2, occupied: [0, 1] });
-  const result = await createCrewInstance(port, {}, ENTRY);
+test('目标房间满员时在 Undo 和节点创建前失败', async () => {
+  const port = portWithOccupied([0, 1]);
+  const result = await createCrewInstance(port, { nodeUuid: 'room-node' }, entry);
   assert.equal(result.ok, false);
   assert.match(result.message, /目标房间已满/);
-  assert.equal(port.calls.some(([name]) => name === 'begin'), false);
-  assert.equal(port.calls.some(([name]) => name === 'create'), false);
+  assert.equal(port.calls.length, 0);
 });
 
-test('目标房间不存在时在 Undo 和 createNode 前返回中文错误', async () => {
-  const port = scene({ includeTargetRoom: false });
-  const result = await createCrewInstance(port, {}, ENTRY);
+test('未选择目标房间时返回中文错误且不创建', async () => {
+  const port = portWithOccupied([]);
+  const result = await createCrewInstance(port, {}, entry);
   assert.equal(result.ok, false);
-  assert.match(result.message, /目标房间不存在/);
-  assert.equal(port.calls.some(([name]) => name === 'begin'), false);
-  assert.equal(port.calls.some(([name]) => name === 'create'), false);
+  assert.match(result.message, /选择目标房间/);
+  assert.equal(port.calls.length, 0);
 });
 
-test('船员初始站位失败时删除临时节点并取消 Undo', async () => {
-  const port = scene({ placed: false });
-  const result = await createCrewInstance(port, {}, ENTRY);
+test('船员初始站位应用失败时删除临时节点并取消 Undo', async () => {
+  global.Editor = { Selection: { select() {} } };
+  const port = portWithOccupied([], false);
+  const result = await createCrewInstance(port, { nodeUuid: 'room-node' }, entry);
   assert.equal(result.ok, false);
-  assert.ok(port.calls.some(([name]) => name === 'remove'));
-  assert.ok(port.calls.some(([name]) => name === 'cancel'));
+  assert.equal(port.calls.some(([name]) => name === 'remove'), true);
+  assert.equal(port.calls.some(([name]) => name === 'cancel'), true);
+  assert.equal(port.calls.some(([name]) => name === 'abort'), true);
+  delete global.Editor;
 });

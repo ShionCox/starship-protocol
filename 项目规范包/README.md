@@ -5,8 +5,9 @@
 > **服务端**：FastAPI + MySQL 8 + Redis；权威战斗使用 Node.js + TypeScript 共享 `GameCore`  
 > **正式首发平台**：Windows Native；Web Desktop 仅用于 R0/R1 开发预览与自动验证  
 > **文档用途**：项目开发、GPT-5.6 / Codex 协作、代码审查、测试与验收的统一依据  
-> **版本**：V0.5（Windows 发行安全基线版）  
-> **日期**：2026-08-09
+> **当前阶段**：R1 客户端基础重构（R0 历史基线已冻结）
+> **版本**：V0.6（客户端重基线版）
+> **日期**：2026-08-12
 
 ---
 
@@ -110,16 +111,21 @@ flowchart TB
 | Cocos 编辑器创作工具插件化决策 | `docs/ADR-0001-Cocos编辑器创作工具插件化.md` |
 | Cocos 编辑器创作入口收敛决策 | `docs/ADR-0003-Cocos编辑器创作入口收敛.md` |
 | Windows 正式发行、签名启动器与版本验证决策 | `docs/ADR-0002-Windows正式发行与服务端版本验证.md` |
+| R1 三场景、共享 UI、多舰、玩家状态与服务器边界 | `docs/ADR-0004-R1客户端重基线与服务器边界.md` |
 
 ---
 
-## 5. 首个开发目标
+## 5. 当前开发目标
 
-第一条正式开发任务保持不变：
+R0 的第一条 20×10 网格任务已经完成并冻结。当前执行 `R1-FOUNDATION-CHECKLIST.md`：
 
-> 实现一个 **20×10 飞船逻辑网格**，支持 **2×2 房间拖放、非法格判断、重叠判断、镜头缩放/拖动、JSON 保存与恢复**，并成功构建 Web Desktop。
+- GameCore 使用 `HullDefinition + ShipModel` 支持不同网格与非矩形 Mask；
+- 运行场景固定为 `BootScene / MainScene / BattleScene`；
+- Main/Battle 复用 `UIRoot.prefab`，敌我复用 `ShipView.prefab`；
+- 开发期 UI 只依赖 `PlayerStatePort`，使用单一玩家状态 Envelope；
+- 完成 Creator 持久资产和正式 Web Desktop 重新验收后，再进入维修系统。
 
-在该任务通过 `R0` 验收前，不提前开发登录、商城、公会、赛季等外围系统。
+登录、商城、公会、赛季、联网经济和正式 Windows 发行仍属于后续阶段。
 
 ---
 
@@ -130,7 +136,7 @@ flowchart TB
 - Cocos Component 负责“显示”和“输入适配”，不负责最终战斗规则。
 - 所有需要设计人员调整的场景、Prefab 和视觉参数必须在 Cocos 编辑器中可见可改；Inspector 面向设计人员的属性名称和提示使用中文。
 - 网格化内容在编辑器内拖动时自动吸附到逻辑网格，运行时仍由 GameCore 校验并保存整数逻辑坐标。
-- 每个场景只有一个 SceneSettings；网格尺寸、吸附和场景外观参数集中配置，View 与 Prefab 只读取，不保留副本。
+- 网格尺寸、有效格 Mask 和容量只来自 `HullDefinition`；Scene/Prefab 只保存表现参数和引用。
 - 批量创建、校验和未来关卡导出统一通过项目级 Cocos 扩展；插件只负责创作，关闭后不得影响运行与构建。
 - 房间 Prefab 保存表现，版本化 JSON 保存规则；新房间不再通过新增 TypeScript 常量接入。
 - 高频重复对象使用 Prefab + 对象池或数据驱动实例化。
@@ -139,4 +145,4 @@ flowchart TB
 - 中文注释重点解释“为什么”和“不变量”，避免逐行翻译代码。
 - 新增依赖、全局服务、通用组件前必须先搜索现有工程，避免重复实现。
 - 重要玩法改动必须更新对应唯一主文档和测试。
-- R0/R1 的 Web 包和源 JSON 只用于开发验证；正式 Windows 包必须由签名启动器验证，使用加密规则包，并由服务端掌握账号、奖励、库存和战斗权威。
+- R1 的 Web 包和源 JSON 只用于开发验证；未来正式 Windows 包与服务器按 ADR-0002 重新实现并完成真实部署验收。

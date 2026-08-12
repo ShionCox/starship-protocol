@@ -8,7 +8,7 @@ import type {
 } from '../shared/editor-scene';
 import { componentTypeMatches, getSceneComponentTarget, getSceneComponentUuid } from '../shared/editor-scene';
 import type { RoomPrefabCatalogEntry } from './discover-room-prefabs';
-import { isPrototypeSceneNodeName } from '../scene/prototype-scene-names';
+import { isSceneNodeName } from '../scene/scene-names';
 
 export interface RoomSceneAuthoringResult {
   readonly ok: boolean;
@@ -25,12 +25,6 @@ export type RoomPlacementTarget =
     readonly message: string;
   }
   | {
-    readonly ok: true;
-    readonly mode: 'canvas' | 'scene-root';
-    readonly node: SceneNodeTree;
-    readonly message: string;
-  }
-  | {
     readonly ok: false;
     readonly mode: 'blocked';
     readonly message: string;
@@ -43,98 +37,82 @@ export type RoomPlacementTarget =
 export function resolveRoomRoot(
   tree: SceneNodeTree,
   context: SceneSelectionContext,
+  componentClasses: readonly SceneComponentClassInfo[] = [],
 ): { readonly ok: true; readonly node: SceneNodeTree } | { readonly ok: false; readonly message: string } {
   const nodes = flattenTree(tree);
   const byUuid = new Map(nodes.filter((node) => typeof node.uuid === 'string').map((node) => [node.uuid as string, node]));
   const selected = context.nodeUuid === undefined ? undefined : byUuid.get(context.nodeUuid);
-  if (selected !== undefined && isPrototypeSceneNodeName(selected.name, 'roomRoot')) {
+  if (selected !== undefined && isSceneNodeName(selected.name, 'roomRoot')) {
     return { ok: true, node: selected };
   }
 
   let cursor = selected;
   while (cursor?.parent !== undefined) {
     cursor = byUuid.get(cursor.parent);
-    if (cursor !== undefined && isPrototypeSceneNodeName(cursor.name, 'roomRoot')) {
+    if (cursor !== undefined && isSceneNodeName(cursor.name, 'roomRoot')) {
       return { ok: true, node: cursor };
     }
   }
 
-  if (selected !== undefined && isPrototypeSceneNodeName(selected.name, 'shipRoot')) {
-    const children = (selected.children ?? []).filter((node) => isPrototypeSceneNodeName(node.name, 'roomRoot'));
+  if (selected !== undefined && findComponentInNode(selected, 'ShipView', componentClasses) !== null) {
+    const children = (selected.children ?? []).filter((node) => isSceneNodeName(node.name, 'roomRoot'));
     if (children.length === 1) return { ok: true, node: children[0] };
-    return { ok: false, message: 'ShipRoot 下缺少唯一 RoomRoot，请先初始化 Prototype 场景骨架' };
+    return { ok: false, message: '飞船视图下缺少唯一“房间容器”' };
   }
 
-  const roomRoots = nodes.filter((node) => isPrototypeSceneNodeName(node.name, 'roomRoot'));
+  const roomRoots = nodes.filter((node) => isSceneNodeName(node.name, 'roomRoot'));
   if (roomRoots.length === 1) return { ok: true, node: roomRoots[0] };
-  if (roomRoots.length === 0) return { ok: false, message: '场景中没有 RoomRoot，请先初始化 Prototype 场景骨架' };
-  return { ok: false, message: '场景中存在多个 RoomRoot，无法安全决定房间父节点' };
+  if (roomRoots.length === 0) return { ok: false, message: '场景中没有“房间容器”，请先创建飞船视图实例' };
+  return { ok: false, message: '场景中存在多艘飞船，请先选择目标飞船或其房间容器' };
 }
 
 /**
  * 解析房间实例的当前场景放置目标。
  * 房间目录是项目级资源；只有存在完整网格入口时才把创建动作绑定到 RoomRoot。
- * 没有标准骨架时优先挂到 Canvas，避免把资源库错误地限制为某个场景。
+ * 新基线不再回退到 Canvas 或场景根；没有明确 ShipView 时停止，避免把房间挂到错误飞船。
  */
 export function resolveRoomPlacementTarget(
   tree: SceneNodeTree,
   context: SceneSelectionContext,
   componentClasses: readonly SceneComponentClassInfo[] = [],
 ): RoomPlacementTarget {
-  const roomRootResult = resolveRoomRoot(tree, context);
-  const appRoot = flattenTree(tree).find((node) => isPrototypeSceneNodeName(node.name, 'appRoot'));
-  const settings = appRoot === undefined ? null : findComponentInNode(appRoot, 'PrototypeSceneSettings', componentClasses);
-  const camera = appRoot === undefined ? null : findComponentInNode(appRoot, 'CameraController', componentClasses);
-  const settingsTarget = getSceneComponentTarget(settings);
-  if (roomRootResult.ok && roomRootResult.node.uuid !== undefined && settingsTarget !== undefined && camera !== null) {
+  const roomRootResult = resolveRoomRoot(tree, context, componentClasses);
+  if (roomRootResult.ok === false) return { ok: false, mode: 'blocked', message: roomRootResult.message };
+  if (roomRootResult.node.uuid === undefined) return { ok: false, mode: 'blocked', message: '房间容器缺少 UUID' };
+  const nodes = flattenTree(tree);
+  const byUuid = new Map(nodes.filter((node) => node.uuid !== undefined).map((node) => [node.uuid as string, node]));
+  let cursor: SceneNodeTree | undefined = roomRootResult.node;
+  let shipComponent: SceneComponentInfo | null = null;
+  while (cursor !== undefined) {
+    shipComponent = findComponentInNode(cursor, 'ShipView', componentClasses);
+    if (shipComponent !== null) break;
+    cursor = cursor.parent === undefined ? undefined : byUuid.get(cursor.parent);
+  }
+  const settingsTarget = getSceneComponentTarget(shipComponent);
+  if (settingsTarget !== undefined) {
     return {
       ok: true,
       mode: 'grid',
       node: roomRootResult.node,
       settings: settingsTarget,
-      message: '已解析标准 RoomRoot，可按逻辑网格创建房间建筑',
+      message: '已解析目标飞船的房间容器，可按船体逻辑网格创建房间',
     };
   }
-
-  // 多个 RoomRoot 表示场景结构冲突；已有选择无法安全消除歧义时不静默改挂到别处。
-  if (!roomRootResult.ok && roomRootResult.message.includes('多个 RoomRoot')) {
-    return { ok: false, mode: 'blocked', message: roomRootResult.message };
-  }
-
-  const canvas = resolveCanvasNode(tree, context, componentClasses);
-  if (canvas?.uuid !== undefined) {
-    return {
-      ok: true,
-      mode: 'canvas',
-      node: canvas,
-      message: '未发现完整标准骨架，将创建到 Canvas 顶层',
-    };
-  }
-  if (tree.uuid !== undefined) {
-    return {
-      ok: true,
-      mode: 'scene-root',
-      node: tree,
-      message: '未发现完整骨架和 Canvas，将创建到场景顶层；请在编辑器中确认 2D 可见性',
-    };
-  }
-  return { ok: false, mode: 'blocked', message: '当前场景缺少可用根节点，无法创建房间建筑' };
+  return { ok: false, mode: 'blocked', message: '房间容器不属于有效 ShipView，无法安全创建房间' };
 }
 
 export function nextRoomInstanceId(
-  tree: SceneNodeTree,
+  _scope: SceneNodeTree,
   definitionId: string,
   existingIds: readonly string[] = [],
 ): string {
-  const used = new Set(existingIds.filter((id) => id.length > 0));
-  for (const node of flattenTree(tree)) {
-    for (const component of node.components ?? []) {
-      if (component.type === 'RoomView') used.add(node.name ?? '');
-    }
-  }
+  // 实例 ID 由调用方在目标 RoomRoot 内读取 RoomView 属性后传入；节点名
+  // 不是稳定 ID，不能把全场景节点名混入命名空间，也不能阻止不同飞船复用短 ID。
+  const used = new Set(existingIds.map((id) => id.trim()).filter((id) => id.length > 0));
   let index = 1;
-  while (used.has(`${definitionId}-${index}`) || used.has(`Room-${definitionId}-${index}`)) index += 1;
-  return `${definitionId}-${index}`;
+  const normalizedDefinitionId = definitionId.trim();
+  while (used.has(`${normalizedDefinitionId}-${index}`) || used.has(`Room-${normalizedDefinitionId}-${index}`)) index += 1;
+  return `${normalizedDefinitionId}-${index}`;
 }
 
 /** 面板创建房间实例的原子操作：失败不留下节点，成功只生成一条 Undo 记录。 */
@@ -154,17 +132,23 @@ export async function createRoomInstance(
 
   let position: { readonly x: number; readonly y: number } | undefined;
   if (placementTarget.mode === 'grid') {
-    const candidate = await scene.executeComponentMethod(
-      placementTarget.settings.uuid,
-      'findFirstAvailableRoomPlacement',
-      [entry.width, entry.height],
-    ) as { readonly x?: number; readonly y?: number } | null;
+    let candidate: { readonly x?: number; readonly y?: number } | null;
+    try {
+      candidate = await scene.executeComponentMethod(
+        placementTarget.settings.uuid,
+        'findFirstAvailableRoomPlacement',
+        [entry.width, entry.height],
+      ) as { readonly x?: number; readonly y?: number } | null;
+    } catch (error) {
+      return { ok: false, message: `无法计算 ${entry.displayName} 的合法空位：${toMessage(error)}` };
+    }
     if (candidate === null || !Number.isInteger(candidate?.x) || !Number.isInteger(candidate?.y)) {
       return { ok: false, message: `没有可放置 ${entry.displayName} 的合法空位` };
     }
     position = { x: candidate.x as number, y: candidate.y as number };
   }
-  const existingIds = await collectRoomInstanceIds(scene, tree, componentClasses);
+  const existingIds = await collectRoomInstanceIds(scene, placementTarget.node, componentClasses);
+  if (existingIds.ok === false) return { ok: false, message: existingIds.message };
   let createdUuid: string | undefined;
   let undoId: string | undefined;
   try {
@@ -191,7 +175,7 @@ export async function createRoomInstance(
     const roomViewUuid = getSceneComponentUuid(roomViewComponent);
     if (roomViewUuid === undefined) throw new Error('生成的 Prefab 缺少 RoomView 组件');
 
-    const instanceId = nextRoomInstanceId(createdTree, entry.id, existingIds);
+    const instanceId = nextRoomInstanceId(placementTarget.node, entry.id, existingIds.ids);
     const roomViewTarget = getSceneComponentTarget(roomViewComponent);
     if (roomViewTarget === undefined) throw new Error('生成的 Prefab 缺少可编辑的 RoomView 组件定位');
     if (!(await scene.setProperty(roomViewTarget, 'roomInstanceId', instanceId, { record: false }))) {
@@ -211,9 +195,7 @@ export async function createRoomInstance(
     selectNode(createdUuid);
     // 聚焦只是编辑器体验增强；Undo 已提交后，聚焦失败不能反向删除已成功创建的房间。
     await focusNode(createdUuid).catch(() => undefined);
-    const placementMessage = placementTarget.mode === 'grid'
-      ? '已按逻辑网格放置'
-      : placementTarget.mode === 'canvas' ? '已放到 Canvas 顶层' : '已放到场景顶层';
+    const placementMessage = '已按目标飞船逻辑网格放置';
     return { ok: true, message: `已创建 ${entry.displayName}，${placementMessage}，实例 ID：${instanceId}`, nodeUuid: createdUuid };
   } catch (error) {
     if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
@@ -221,26 +203,6 @@ export async function createRoomInstance(
     await scene.snapshotAbort().catch(() => undefined);
     return { ok: false, message: `${toMessage(error)}；已回滚临时房间节点` };
   }
-}
-
-function resolveCanvasNode(
-  tree: SceneNodeTree,
-  context: SceneSelectionContext,
-  componentClasses: readonly SceneComponentClassInfo[],
-): SceneNodeTree | undefined {
-  const nodes = flattenTree(tree);
-  const byUuid = new Map(nodes.filter((node) => typeof node.uuid === 'string').map((node) => [node.uuid as string, node]));
-  let cursor = context.nodeUuid === undefined ? undefined : byUuid.get(context.nodeUuid);
-  while (cursor !== undefined) {
-    if (isCanvasNode(cursor, componentClasses)) return cursor;
-    cursor = cursor.parent === undefined ? undefined : byUuid.get(cursor.parent);
-  }
-  return nodes.find((node) => isCanvasNode(node, componentClasses));
-}
-
-function isCanvasNode(node: SceneNodeTree, componentClasses: readonly SceneComponentClassInfo[]): boolean {
-  return isPrototypeSceneNodeName(node.name, 'canvas')
-    || (node.components ?? []).some((component) => componentTypeMatches(component, 'Canvas', componentClasses));
 }
 
 function flattenTree(tree: SceneNodeTree): SceneNodeTree[] {
@@ -273,34 +235,43 @@ function findComponentInNode(
   return null;
 }
 
+type RoomInstanceIdCollection =
+  | { readonly ok: true; readonly ids: readonly string[] }
+  | { readonly ok: false; readonly message: string };
+
 async function collectRoomInstanceIds(
   scene: SceneQueryPort,
-  tree: SceneNodeTree,
+  roomRoot: SceneNodeTree,
   componentClasses: readonly SceneComponentClassInfo[],
-): Promise<string[]> {
+): Promise<RoomInstanceIdCollection> {
   const result: string[] = [];
-  for (const node of flattenTree(tree)) {
+  const seen = new Set<string>();
+  // 只扫描目标飞船的房间容器子树；其他 ShipView 的同名短 ID 不属于本次命名空间。
+  for (const node of flattenTree(roomRoot)) {
     for (const component of node.components ?? []) {
       if (!componentTypeMatches(component, 'RoomView', componentClasses)) continue;
       const componentUuid = getSceneComponentUuid(component);
-      if (componentUuid === undefined) continue;
+      if (componentUuid === undefined) return { ok: false, message: '已有房间缺少可读取的 RoomView 组件标识' };
       try {
         const queried = await scene.queryComponent(componentUuid);
         const id = readStringProperty(queried?.value?.roomInstanceId);
-        if (id !== undefined) result.push(id);
-      } catch {
-        // 旧 Prefab 的单组件查询失败不应阻断创建，最终唯一性仍由运行时校验。
+        if (id === undefined) return { ok: false, message: '已有房间实例标识缺失，无法安全生成新实例' };
+        if (seen.has(id)) return { ok: false, message: `目标飞船内房间实例标识重复：${id}` };
+        seen.add(id);
+        result.push(id);
+      } catch (error) {
+        return { ok: false, message: `无法读取已有房间实例标识：${toMessage(error)}` };
       }
     }
   }
-  return result;
+  return { ok: true, ids: result };
 }
 
 function readStringProperty(value: unknown): string | undefined {
-  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
   if (typeof value !== 'object' || value === null) return undefined;
   const nested = (value as { value?: unknown }).value;
-  return typeof nested === 'string' && nested.length > 0 ? nested : undefined;
+  return typeof nested === 'string' && nested.trim().length > 0 ? nested.trim() : undefined;
 }
 
 function selectNode(uuid: string): void {

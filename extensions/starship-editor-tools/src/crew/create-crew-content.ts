@@ -1,5 +1,6 @@
 import { CREW_CONFIG_DIRECTORY, DEFAULT_PREFAB_DIRECTORY } from '../constants';
 import type { AssetDbPort } from '../shared/editor-asset-db';
+import { describeRollback, rollbackCreatedAssets } from '../shared/rollback-assets';
 
 export interface CrewCreationRequest {
   readonly id: string;
@@ -22,24 +23,6 @@ export type CrewCreationResult =
  * 删除一个资源失败时仍继续删除其他资源；否则前一个失败会把后续资源留在
  * Asset DB 中，调用方也无法知道实际残留了哪一个路径。
  */
-export async function rollbackCrewAssets(
-  assetDb: Pick<AssetDbPort, 'deleteAsset'>,
-  urls: readonly string[],
-): Promise<readonly string[]> {
-  const errors: string[] = [];
-  for (const url of urls) {
-    try {
-      const deleted = await assetDb.deleteAsset(url);
-      if (deleted === null || deleted === undefined) {
-        errors.push(`${url}：Asset DB 未确认删除资源`);
-      }
-    } catch (cause) {
-      errors.push(`${url}：${toMessage(cause)}`);
-    }
-  }
-  return errors;
-}
-
 const CREW_ID_PATTERN = /^crew-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PREFAB_NAME_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
 const ROLES = new Set(['ENGINEER', 'GUNNER']);
@@ -60,11 +43,8 @@ export async function createCrewContent(request: CrewCreationRequest, assetDb: A
     try {
       if (await assetDb.copyAsset(request.templateUrl, prefabUrl) === null) throw new Error(`复制船员预制体失败：${prefabUrl}`);
     } catch (cause) {
-      const rollbackErrors = await rollbackCrewAssets(assetDb, [prefabUrl, configUrl]);
-      const rollbackMessage = rollbackErrors.length === 0
-        ? '已回滚新资源'
-        : `回滚失败，资源清理未完成，无法确认以下资源已删除：${rollbackErrors.join('；')}`;
-      return { ok: false, message: `${toMessage(cause)}；${rollbackMessage}` };
+      const rollbackErrors = await rollbackCreatedAssets(assetDb, [prefabUrl, configUrl]);
+      return { ok: false, message: `${toMessage(cause)}；${describeRollback(rollbackErrors)}` };
     }
     return { ok: true, configUrl, prefabUrl, message: '船员定义 JSON 和 Prefab 已创建，正在自动绑定船员定义。' };
   } catch (cause) {

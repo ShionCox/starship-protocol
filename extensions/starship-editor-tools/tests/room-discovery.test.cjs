@@ -68,7 +68,7 @@ test('无法定位 RoomView 脚本时自动发现 fail closed', async () => {
   assert.match(result.warnings[0], /无法定位 RoomView/);
 });
 
-test('query-uuid 暂时为空时从 Asset DB 脚本列表回退解析 RoomView', async () => {
+test('query-uuid 与 query-info 都为空时不扫描整个项目猜测脚本', async () => {
   const db = fakeDb();
   db.queryUuid = async () => '';
   const originalQueryAssets = db.queryAssets;
@@ -76,8 +76,8 @@ test('query-uuid 暂时为空时从 Asset DB 脚本列表回退解析 RoomView',
     ? [{ uuid: 'room-view-script', url: 'db://assets/scripts/presentation/RoomView.ts', isDirectory: false }]
     : originalQueryAssets(options);
   const result = await discoverRoomPrefabs(db);
-  assert.equal(result.entries.length, 1);
-  assert.equal(result.entries[0].id, 'room-laser');
+  assert.equal(result.entries.length, 0);
+  assert.match(result.warnings[0], /无法定位 RoomView/);
 });
 
 test('query-uuid 为空时优先使用公开 Asset DB 资源信息', async () => {
