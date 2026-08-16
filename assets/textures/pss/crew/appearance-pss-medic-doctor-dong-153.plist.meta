@@ -1,0 +1,109 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "5e733ab5-c69c-4d93-8f68-51ed5e2cee81",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "f4df3": {
+      "importer": "sprite-frame",
+      "uuid": "5e733ab5-c69c-4d93-8f68-51ed5e2cee81@f4df3",
+      "displayName": "",
+      "id": "f4df3",
+      "name": "appearance-pss-medic-doctor-dong-153-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "39358761-86b5-4764-af75-de120f93ef9d@6c48a",
+        "atlasUuid": "5e733ab5-c69c-4d93-8f68-51ed5e2cee81",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "cd091": {
+      "importer": "sprite-frame",
+      "uuid": "5e733ab5-c69c-4d93-8f68-51ed5e2cee81@cd091",
+      "displayName": "",
+      "id": "cd091",
+      "name": "appearance-pss-medic-doctor-dong-153-frame-001",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 32,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "39358761-86b5-4764-af75-de120f93ef9d@6c48a",
+        "atlasUuid": "5e733ab5-c69c-4d93-8f68-51ed5e2cee81",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "appearance-pss-medic-doctor-dong-153.png",
+    "format": 2,
+    "uuid": "5e733ab5-c69c-4d93-8f68-51ed5e2cee81",
+    "textureUuid": "39358761-86b5-4764-af75-de120f93ef9d@6c48a"
+  }
+}

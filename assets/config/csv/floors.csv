@@ -1,0 +1,3 @@
+﻿id,displayName,metalCost,buildDurationMs,demolishDurationMs,refundPermille,visualId
+#稳定标识,中文名称,金属成本,建造时长毫秒,拆除时长毫秒,返还千分比,视觉标识
+floor-basic,基础地板,5,2000,1000,500,visual-floor-basic

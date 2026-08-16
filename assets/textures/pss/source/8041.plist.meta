@@ -1,0 +1,293 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "360d4": {
+      "importer": "sprite-frame",
+      "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060@360d4",
+      "displayName": "",
+      "id": "360d4",
+      "name": "visual-pss-room-shield-8041-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a",
+        "atlasUuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "a5492": {
+      "importer": "sprite-frame",
+      "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060@a5492",
+      "displayName": "",
+      "id": "a5492",
+      "name": "visual-pss-room-shield-8041-frame-001",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 50,
+        "trimY": 0,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a",
+        "atlasUuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "a0021": {
+      "importer": "sprite-frame",
+      "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060@a0021",
+      "displayName": "",
+      "id": "a0021",
+      "name": "visual-pss-room-shield-8041-frame-002",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 100,
+        "trimY": 0,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a",
+        "atlasUuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "2a0a8": {
+      "importer": "sprite-frame",
+      "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060@2a0a8",
+      "displayName": "",
+      "id": "2a0a8",
+      "name": "visual-pss-room-shield-8041-frame-003",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 50,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a",
+        "atlasUuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "1f774": {
+      "importer": "sprite-frame",
+      "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060@1f774",
+      "displayName": "",
+      "id": "1f774",
+      "name": "visual-pss-room-shield-8041-frame-004",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 50,
+        "trimY": 50,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a",
+        "atlasUuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "d1798": {
+      "importer": "sprite-frame",
+      "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060@d1798",
+      "displayName": "",
+      "id": "d1798",
+      "name": "visual-pss-room-shield-8041-frame-005",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 100,
+        "trimY": 50,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a",
+        "atlasUuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "8041.png",
+    "format": 2,
+    "uuid": "9bf9265b-ca57-4320-8d72-c40f1832a060",
+    "textureUuid": "4e89e343-00cc-410a-a7c5-f97d6f554f71@6c48a"
+  }
+}

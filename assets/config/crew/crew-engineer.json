@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "id": "crew-engineer",
-  "displayName": "工程师",
-  "role": "ENGINEER",
-  "maxHp": 100,
-  "moveTicksPerEdge": 5
-}

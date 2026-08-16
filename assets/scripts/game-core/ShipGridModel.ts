@@ -119,8 +119,8 @@ export class ShipGridModel implements ShipGridReadModel {
     if (
       !Number.isInteger(hull.gridWidth) || hull.gridWidth <= 0 ||
       !Number.isInteger(hull.gridHeight) || hull.gridHeight <= 0 ||
-      hull.validCells.length !== hull.gridWidth * hull.gridHeight ||
-      !hull.validCells.every((cell) => cell === 0 || cell === 1) ||
+      hull.cellTypes.length !== hull.gridWidth * hull.gridHeight ||
+      !hull.cellTypes.every((cell) => cell === 'VOID' || cell === 'BUILDABLE' || cell === 'FIXED_WALL') ||
       !Number.isInteger(hull.maxRooms) || hull.maxRooms <= 0
     ) {
       throw new RangeError('船体网格定义无效');
@@ -129,7 +129,7 @@ export class ShipGridModel implements ShipGridReadModel {
     this.height = hull.gridHeight;
     this.hullId = hull.id;
     this.maxRooms = hull.maxRooms;
-    this.usableCells = Uint8Array.from(hull.validCells);
+    this.usableCells = Uint8Array.from(hull.cellTypes, (cell) => cell === 'BUILDABLE' ? 1 : 0);
     this.occupants = Array<string | null>(this.width * this.height).fill(null);
   }
 

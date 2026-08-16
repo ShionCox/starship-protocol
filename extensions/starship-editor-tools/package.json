@@ -1,9 +1,9 @@
 {
   "package_version": 2,
-  "version": "1.5.0",
+  "version": "2.0.0",
   "name": "starship-editor-tools",
   "description": "i18n:starship-editor-tools.description",
-  "main": "./dist/main.js",
+  "main": "./dist/extension-bootstrap.js",
   "author": "Starship Protocol",
   "editor": ">=3.8.0",
   "scripts": {
@@ -17,17 +17,6 @@
     "typescript": "5.8.2"
   },
   "panels": {
-    "default": {
-      "title": "星舰协议 - 新建房间建筑",
-      "type": "simple",
-      "main": "./dist/panels/room-create",
-      "size": {
-        "min-width": 520,
-        "min-height": 680,
-        "width": 600,
-        "height": 760
-      }
-    },
     "authoring": {
       "title": "星舰创作工具",
       "type": "dockable",
@@ -60,20 +49,8 @@
       }
     },
     "messages": {
-      "open-room-create": {
-        "methods": ["openRoomCreate"]
-      },
-      "create-room-content": {
-        "methods": ["createRoomContent"]
-      },
-      "create-crew-content": {
-        "methods": ["createCrewContent"]
-      },
       "open-created-prefab": {
         "methods": ["openCreatedPrefab"]
-      },
-      "validate-open-room-prefab": {
-        "methods": ["validateOpenRoomPrefab"]
       },
       "open-authoring-panel": {
         "methods": ["openAuthoringPanel"]
@@ -90,17 +67,62 @@
       "create-crew-instance": {
         "methods": ["createCrewInstance"]
       },
-      "update-room-definition": {
-        "methods": ["updateRoomDefinition"]
+      "build-pss-index": {
+        "methods": ["buildPssIndex"]
       },
-      "update-crew-definition": {
-        "methods": ["updateCrewDefinition"]
+      "search-pss-assets": {
+        "methods": ["searchPssAssets"]
       },
-      "create-hull-definition": {
-        "methods": ["createHullDefinition"]
+      "bind-first-pss-room-appearances": {
+        "methods": ["bindFirstPssRoomAppearances"]
       },
-      "update-hull-definition": {
-        "methods": ["updateHullDefinition"]
+      "bind-first-pss-crew-appearances": {
+        "methods": ["bindFirstPssCrewAppearances"]
+      },
+      "import-and-bind-first-pss-hull-appearances": {
+        "methods": ["importAndBindFirstPssHullAppearances"]
+      },
+      "get-csv-config-tables": {
+        "methods": ["getCsvConfigTables"]
+      },
+      "import-csv-config-bundle": {
+        "methods": ["importCsvConfigBundle"]
+      },
+      "get-room-csv-drafts": {
+        "methods": ["getRoomCsvDrafts"]
+      },
+      "create-room-csv-draft": {
+        "methods": ["createRoomCsvDraft"]
+      },
+      "create-crew-csv-draft": {
+        "methods": ["createCrewCsvDraft"]
+      },
+      "create-hull-csv-draft": {
+        "methods": ["createHullCsvDraft"]
+      },
+      "preview-room-definition": {
+        "methods": ["previewRoomDefinition"]
+      },
+      "cancel-authoring-preview": {
+        "methods": ["cancelAuthoringPreview"]
+      },
+      "save-room-csv-draft": {
+        "methods": ["saveRoomCsvDraft"]
+      },
+      "save-crew-csv-draft": {
+        "methods": ["saveCrewCsvDraft"]
+      },
+      "preview-crew-definition": {
+        "methods": ["previewCrewDefinition"]
+      },
+      "save-hull-csv-draft": {
+        "methods": ["saveHullCsvDraft"]
+      },
+      "preview-hull-definition": {
+        "methods": ["previewHullDefinition"]
+      },
+      "update-room-instance": {
+        "methods": ["updateRoomInstance"]
       },
       "create-ship-instance": {
         "methods": ["createShipInstance"]
@@ -111,11 +133,23 @@
       "create-foundation-prefabs": {
         "methods": ["createFoundationPrefabs"]
       },
+      "rebuild-p8-starter-ship": {
+        "methods": ["rebuildP8StarterShip"]
+      },
       "mount-shared-ui": {
         "methods": ["mountSharedUi"]
       },
       "wire-scene-foundation": {
         "methods": ["wireSceneFoundation"]
+      },
+      "preview-page": {
+        "methods": ["previewPage"]
+      },
+      "open-page-prefab": {
+        "methods": ["openPagePrefab"]
+      },
+      "configure-p8-voxel-demo-scene": {
+        "methods": ["configureP8VoxelDemoScene"]
       }
     }
   }

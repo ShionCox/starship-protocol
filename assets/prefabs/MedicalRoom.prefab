@@ -1,0 +1,453 @@
+[
+  {
+    "__type__": "cc.Prefab",
+    "_name": "MedicalRoom",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_native": "",
+    "data": {
+      "__id__": 1
+    },
+    "optimizationPolicy": 0,
+    "persistent": false
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "MedicalRoom",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": null,
+    "_children": [
+      {
+        "__id__": 2
+      }
+    ],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 12
+      },
+      {
+        "__id__": 14
+      },
+      {
+        "__id__": 16
+      }
+    ],
+    "_prefab": {
+      "__id__": 18
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "房间图像",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 1
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 3
+      },
+      {
+        "__id__": 5
+      },
+      {
+        "__id__": 7
+      },
+      {
+        "__id__": 9
+      }
+    ],
+    "_prefab": {
+      "__id__": 11
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 2
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 4
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 50,
+      "height": 50
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "fa+cCwYuNH6q4+tkRG8R17"
+  },
+  {
+    "__type__": "cc.Sprite",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 2
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 6
+    },
+    "_customMaterial": null,
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4,
+    "_color": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 255
+    },
+    "_spriteFrame": {
+      "__uuid__": "83e07b54-64eb-4d52-8014-c81577487226@9138c",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "_type": 0,
+    "_fillType": 0,
+    "_sizeMode": 1,
+    "_fillCenter": {
+      "__type__": "cc.Vec2",
+      "x": 0,
+      "y": 0
+    },
+    "_fillStart": 0,
+    "_fillRange": 0,
+    "_isTrimmedMode": true,
+    "_useGrayscale": false,
+    "_atlas": null,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "65jGKiA2ZAhKTMtleQ9L11"
+  },
+  {
+    "__type__": "cc.Animation",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 2
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 8
+    },
+    "playOnLoad": false,
+    "_clips": [],
+    "_defaultClip": null,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "13gLXVgWlM5KG0p1/k5Jta"
+  },
+  {
+    "__type__": "291745esI1A4YI8WuwnFJta",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 2
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 10
+    },
+    "mode": 0,
+    "sprite": {
+      "__id__": 5
+    },
+    "animation": {
+      "__id__": 7
+    },
+    "fallbackGraphics": null,
+    "staticFrame": {
+      "__uuid__": "83e07b54-64eb-4d52-8014-c81577487226@9138c",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "unpoweredFrame": {
+      "__uuid__": "83e07b54-64eb-4d52-8014-c81577487226@9138c",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "poweredFrame": null,
+    "sourceTexture": {
+      "__uuid__": "9ecbc98f-9bae-4fdc-827c-25ec524dc751@6c48a",
+      "__expectedType__": "cc.Texture2D"
+    },
+    "visualId": "visual-pss-room-medbay-1107",
+    "sourceCanvasWidth": 50,
+    "sourceCanvasHeight": 50,
+    "sourceFrameRects": [
+      {
+        "__type__": "cc.Rect",
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 50
+      }
+    ],
+    "alwaysLoopFrames": [],
+    "unpoweredFrames": [
+      {
+        "__uuid__": "83e07b54-64eb-4d52-8014-c81577487226@9138c",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "poweredFrames": [],
+    "alwaysLoopClip": null,
+    "poweredClip": null,
+    "frameRate": 1,
+    "filter": 0,
+    "displayScalePermille": 1000,
+    "gridOffsetX": 0,
+    "gridOffsetY": 0,
+    "pivot": "CENTER",
+    "integerScale": 1,
+    "initiallyPowered": false,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "fdzZyE/rlEJrlz+tLRa49F"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "8dEMcb9ntKBISHMwgq2OXL",
+    "instance": null,
+    "targetOverrides": null,
+    "nestedPrefabInstanceRoots": null
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 13
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 96,
+      "height": 72
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "fe+kyemFxJboYQ0JcsPy9E"
+  },
+  {
+    "__type__": "cc.Graphics",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 15
+    },
+    "_customMaterial": null,
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4,
+    "_color": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 255
+    },
+    "_lineWidth": 5,
+    "_strokeColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 224,
+      "b": 148,
+      "a": 255
+    },
+    "_lineJoin": 2,
+    "_lineCap": 0,
+    "_fillColor": {
+      "__type__": "cc.Color",
+      "r": 185,
+      "g": 92,
+      "b": 35,
+      "a": 245
+    },
+    "_miterLimit": 10,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "2yuBVw7dRDVJtL28s7nYrB"
+  },
+  {
+    "__type__": "f6625IffiZAL5oGhzknzkaR",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 17
+    },
+    "roomInstanceId": "",
+    "roomDefinitionId": "room-medbay",
+    "fillColor": {
+      "__type__": "cc.Color",
+      "r": 185,
+      "g": 92,
+      "b": 35,
+      "a": 245
+    },
+    "borderColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 193,
+      "b": 92,
+      "a": 255
+    },
+    "coreColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 224,
+      "b": 148,
+      "a": 255
+    },
+    "roomAppearance": {
+      "__id__": 9
+    },
+    "initialHp": -1,
+    "validPreviewBorderColor": {
+      "__type__": "cc.Color",
+      "r": 94,
+      "g": 220,
+      "b": 132,
+      "a": 255
+    },
+    "invalidPreviewBorderColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 92,
+      "b": 92,
+      "a": 255
+    },
+    "selectedBorderColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 220,
+      "b": 70,
+      "a": 255
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "d8DEKwlxlOnI2/nIIa+WVY"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "a1iiYs92FLuIYhSZ5NE8UK",
+    "instance": null,
+    "targetOverrides": null
+  }
+]

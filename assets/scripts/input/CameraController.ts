@@ -1,4 +1,4 @@
-import { _decorator, Component, error, EventMouse, input, Input, Node } from 'cc';
+import { _decorator, Camera, Component, error, EventMouse, input, Input, Node } from 'cc';
 
 const { ccclass, menu, property } = _decorator;
 
@@ -19,6 +19,9 @@ export class CameraController extends Component {
 
   @property({ type: Node, displayName: '画布根节点', tooltip: '接收鼠标拖动和滚轮事件的持久画布节点。', group: '节点引用' })
   public canvasRoot: Node | null = null;
+
+  @property({ type: Camera, displayName: '主相机', tooltip: '用于把屏幕鼠标坐标投影回世界网格的持久正交相机。', group: '节点引用' })
+  public camera: Camera | null = null;
   private isDragging = false;
   private isPanBlocked = false;
 

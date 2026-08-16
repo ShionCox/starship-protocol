@@ -3,7 +3,7 @@ const test = require('node:test');
 
 const { createRoomInstance, resolveRoomRoot } = require('../dist/rooms/room-scene-authoring.js');
 
-const entry = { id: 'room-laser', displayName: '激光室', category: 'WEAPON', width: 2, height: 2, prefabUrl: 'db://assets/prefabs/LaserRoom.prefab', prefabUuid: 'prefab-laser', configUrl: 'db://assets/config/rooms/room-laser.json', configUuid: 'config-laser' };
+const entry = { id: 'room-laser', displayName: '激光室', category: 'WEAPON', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 6, powerGeneration: 0, crewCapacity: 2, healingHpPerTick: 0, prefabUrl: 'db://assets/prefabs/LaserRoom.prefab', prefabUuid: 'prefab-laser' };
 
 function tree() {
   return { uuid: 'scene', name: 'MainScene', children: [{ uuid: 'world', name: '世界根', parent: 'scene', children: [{ uuid: 'mount', name: '当前飞船挂载点', parent: 'world', children: [{
@@ -115,7 +115,7 @@ test('创建结果缺少 RoomView 或 Prefab 关联时完整回滚', async () =>
     assert.equal(result.ok, false);
     assert.equal(port.calls.some((call) => call[0] === 'remove'), true);
     assert.equal(port.calls.some((call) => call[0] === 'cancel-recording'), true);
-    assert.equal(port.calls.some((call) => call[0] === 'snapshot-abort'), true);
+    assert.equal(port.calls.some((call) => call[0] === 'snapshot-abort'), false);
     delete global.Editor;
   }
 });

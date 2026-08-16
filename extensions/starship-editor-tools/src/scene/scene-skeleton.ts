@@ -21,7 +21,10 @@ export async function initializeSceneSkeleton(scene: SceneQueryPort, kind: Scene
     const classes = scene.queryComponents === undefined ? [] : await scene.queryComponents();
     const camera = await ensureChild(scene, tree, 'mainCamera', createdNodes);
     const canvas = await ensureChild(scene, tree, 'canvas', createdNodes);
-    const app = await ensureChild(scene, tree, 'appRoot', createdNodes);
+    // Boot 只保留 Canvas 内的最小启动装配；Main/Battle 的应用根仍是场景级节点。
+    const app = kind === 'BOOT'
+      ? await ensureChild(scene, canvas, 'bootAssembly', createdNodes)
+      : await ensureChild(scene, tree, 'appRoot', createdNodes);
     // Cocos 2D 渲染根必须位于 UI_2D 层；子世界节点可继续使用 DEFAULT 层。
     if (!(await scene.setProperty(canvas.uuid as string, '_layer', 33_554_432))) throw new Error('无法设置画布 UI_2D 层');
     await ensureComponent(scene, camera, 'cc.Camera', classes);
@@ -136,8 +139,13 @@ async function wireCameraController(
   const component = app === undefined ? null : findComponent(app, 'CameraController', classes);
   const target = getSceneComponentTarget(component);
   if (target === undefined) throw new Error('主场景镜头控制组件创建后不可编辑');
+  const cameraNode = flattenTree(tree).find((node) => node.name === sceneNodeName('mainCamera'));
+  const cameraComponent = cameraNode === undefined ? null : findComponent(cameraNode, 'cc.Camera', classes);
+  const cameraTarget = getSceneComponentTarget(cameraComponent);
+  if (cameraTarget === undefined) throw new Error('主场景缺少主相机组件，无法绑定镜头投影');
   if (!(await scene.setProperty(target, 'worldRoot', { type: 'cc.Node', uuid: worldUuid }))) throw new Error('无法绑定世界根节点');
   if (!(await scene.setProperty(target, 'canvasRoot', { type: 'cc.Node', uuid: canvasUuid }))) throw new Error('无法绑定画布根节点');
+  if (!(await scene.setProperty(target, 'camera', { type: 'cc.Camera', uuid: cameraTarget.uuid }))) throw new Error('无法绑定主相机投影引用');
 }
 
 async function waitForComponents(scene: SceneQueryPort, kind: SceneSkeletonKind, classes: readonly SceneComponentClassInfo[]): Promise<SceneNodeTree> {

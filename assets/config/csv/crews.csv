@@ -1,0 +1,6 @@
+﻿id,displayName,role,rarity,maxHp,moveTicksPerEdge,repairHpPerTick,appearanceId,traitIds
+#稳定标识,中文名称,职业,稀有度,最大生命,每边移动Tick数,每Tick维修量,外观标识,词条标识列表
+crew-engineer,工程师,ENGINEER,RARE,100,5,1,appearance-pss-engineer-bob-8,trait-construction-speed-250|trait-construction-slot-1
+crew-gunner,武器操作员,GUNNER,COMMON,100,5,0,appearance-pss-gunner-bobby-240,
+crew-medic,医务员,MEDIC,COMMON,100,5,0,appearance-pss-medic-doctor-dong-153,
+crew-soldier,士兵,SOLDIER,COMMON,100,5,0,appearance-pss-soldier-government-45,

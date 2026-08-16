@@ -34,8 +34,8 @@ test('损坏、版本不兼容、船体不匹配、重叠和重复实例安全�
 });
 
 test('恢复时按当前船体Mask重新校验', () => {
-  const mask = Array<number>(20 * 10).fill(1);
-  for (let y = 8; y < 10; y += 1) for (let x = 0; x < 2; x += 1) mask[y * 20 + x] = 0;
+  const mask = Array<'BUILDABLE' | 'VOID'>(20 * 10).fill('BUILDABLE');
+  for (let y = 8; y < 10; y += 1) for (let x = 0; x < 2; x += 1) mask[y * 20 + x] = 'VOID';
   const definition = hull('hull-mask', 20, 10, mask);
   const json = JSON.stringify({ schemaVersion: 1, hullId: definition.id, rooms: [placement('room-reactor-1', 'room-reactor', 0, 8)] });
   assert.equal(restoreShipLayout(json, definition).ok, false);

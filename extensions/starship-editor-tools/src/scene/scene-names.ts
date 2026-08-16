@@ -15,6 +15,7 @@ export const SCENE_NODE_NAMES = {
   battleEnvironment: '战斗环境',
   uiRoot: '界面根',
   appRoot: '应用根',
+  bootAssembly: '启动装配',
 } as const;
 
 export type SceneNodeKey = keyof typeof SCENE_NODE_NAMES;

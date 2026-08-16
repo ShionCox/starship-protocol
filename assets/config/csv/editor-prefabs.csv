@@ -1,0 +1,15 @@
+﻿id,displayName,definitionKind,definitionId,prefabPath
+#稳定标识,中文名称,定义类型,定义标识,Prefab资源路径
+editor-prefab-hull-starter,初始护卫舰,HULL,hull-starter,db://assets/prefabs/ShipView.prefab
+editor-prefab-hull-raider,掠袭舰,HULL,hull-raider,db://assets/prefabs/ShipView.prefab
+editor-prefab-floor-basic,基础地板,FLOOR,floor-basic,db://assets/prefabs/FloorTile.prefab
+editor-prefab-room-elevator,电梯房间,ROOM,room-elevator,db://assets/prefabs/ElevatorRoom.prefab
+editor-prefab-room-stairs,楼梯房间,ROOM,room-stairs,db://assets/prefabs/StairsRoom.prefab
+editor-prefab-room-reactor,反应堆房间,ROOM,room-reactor,db://assets/prefabs/ReactorRoom.prefab
+editor-prefab-room-laser,激光室,ROOM,room-laser,db://assets/prefabs/LaserRoom.prefab
+editor-prefab-room-shield,护盾室,ROOM,room-shield,db://assets/prefabs/ShieldRoom.prefab
+editor-prefab-room-medbay,医疗室,ROOM,room-medbay,db://assets/prefabs/MedicalRoom.prefab
+editor-prefab-crew-engineer,工程师,CREW,crew-engineer,db://assets/prefabs/EngineerCrew.prefab
+editor-prefab-crew-gunner,武器操作员,CREW,crew-gunner,db://assets/prefabs/GunnerCrew.prefab
+editor-prefab-crew-medic,医务员,CREW,crew-medic,db://assets/prefabs/MedicCrew.prefab
+editor-prefab-crew-soldier,士兵,CREW,crew-soldier,db://assets/prefabs/SoldierCrew.prefab

@@ -7,8 +7,8 @@ function baseTree(selected) {
   return { uuid: 'scene', name: 'MainScene', children: [selected] };
 }
 
-const rooms = [{ id: 'room-reactor', displayName: '反应堆', category: 'ENERGY', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, crewCapacity: 0, prefabUrl: 'db://assets/prefabs/ReactorRoom.prefab', prefabUuid: 'prefab', configUrl: 'db://assets/config/rooms/room-reactor.json', configUuid: 'config' }];
-const crews = [{ schemaVersion: 1, id: 'crew-engineer', displayName: '工程师', role: 'ENGINEER', maxHp: 100, moveTicksPerEdge: 5, prefabUrl: 'db://assets/prefabs/EngineerCrew.prefab', prefabUuid: 'crew-prefab', configUrl: 'db://assets/config/crew/crew-engineer.json', configUuid: 'crew-config' }];
+const rooms = [{ id: 'room-reactor', displayName: '反应堆', category: 'ENERGY', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, crewCapacity: 0, prefabUrl: 'db://assets/prefabs/ReactorRoom.prefab', prefabUuid: 'prefab' }];
+const crews = [{ id: 'crew-engineer', displayName: '工程师', role: 'ENGINEER', rarity: 'RARE', maxHp: 100, moveTicksPerEdge: 5, repairHpPerTick: 1, appearanceId: 'appearance-pss-engineer-bob-8', traitIds: [], prefabUrl: 'db://assets/prefabs/EngineerCrew.prefab', prefabUuid: 'crew-prefab' }];
 
 test('按 RoomView 类名或压缩 CID 识别房间实例，并只返回白名单状态', async () => {
   const selected = { uuid: 'room-node', name: '房间-反应堆', parent: 'scene', position: { x: 10, y: 20, z: 0 }, components: [{ type: 'cid-room', value: 'room-view', index: 0 }], children: [] };
@@ -18,13 +18,14 @@ test('按 RoomView 类名或压缩 CID 识别房间实例，并只返回白名�
     componentClasses: [{ name: 'RoomView', cid: 'cid-room' }],
     rooms,
     scene: {
-      async executeComponentMethod() { return { ok: true, message: '有效', roomInstanceId: 'room-reactor-1', roomDefinitionId: 'room-reactor', gridPosition: { x: 2, y: 3 }, raw: { secret: true } }; },
+      async executeComponentMethod() { return { ok: true, message: '有效', roomInstanceId: 'room-reactor-1', roomDefinitionId: 'room-reactor', gridPosition: { x: 2, y: 3 }, initialHp: 60, raw: { secret: true } }; },
       async queryComponent() { return null; },
     },
   });
   assert.equal(state.kind, 'room-instance');
   assert.equal(state.instanceId, 'room-reactor-1');
   assert.deepEqual(state.gridPosition, { x: 2, y: 3 });
+  assert.equal(state.initialHp, 60);
   assert.equal(state.raw, undefined);
   assert.equal(state.definitionFound, true);
 });

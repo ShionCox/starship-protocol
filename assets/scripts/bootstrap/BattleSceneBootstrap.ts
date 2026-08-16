@@ -2,8 +2,9 @@ import { _decorator, Camera, Canvas, Component, error, Layers, log, Node, Vec3 }
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 
 import { BattleHUD } from '../presentation/BattleHUD';
+import { GameConfigCsvSource } from '../presentation/GameConfigCsvSource';
 import { ShipView } from '../presentation/ShipView';
-import { configureGameDisplay } from './configureGameDisplay';
+import { configureGameDisplay, GAME_DESIGN_HEIGHT, GAME_DESIGN_WIDTH } from './configureGameDisplay';
 
 const { ccclass, executeInEditMode, menu, property } = _decorator;
 
@@ -38,7 +39,7 @@ export class BattleSceneBootstrap extends Component {
     if (cameraNode === null || camera === null) return { ok: false, message: '战斗场景缺少“主相机”或 Camera 组件' };
     if (canvasNode === null || canvas === null) return { ok: false, message: '战斗场景缺少“画布”或 Canvas 组件' };
 
-    cameraNode.setPosition(new Vec3(640, 360, 1000));
+    cameraNode.setPosition(new Vec3(GAME_DESIGN_WIDTH / 2, GAME_DESIGN_HEIGHT / 2, 1000));
     cameraNode.setRotationFromEuler(0, 0, 0);
     camera.projection = Camera.ProjectionType.ORTHO;
     camera.orthoHeight = 360;
@@ -52,7 +53,7 @@ export class BattleSceneBootstrap extends Component {
 
   /**
    * 由创作工具调用：引用只从双方挂载点与共享 UIRoot 中解析，禁止跨场景全局搜索。
-   * 同时固定双方挂载点位置，使两艘飞船在编辑器中无需运行即可直接预览。
+   * 场景位置由创作工具通过公开 set-property 持久化；此方法只做引用和布局重复校验。
    */
   public applyEditorSceneReferences(): { readonly ok: boolean; readonly message: string } {
     const scene = this.node.scene;
@@ -67,6 +68,19 @@ export class BattleSceneBootstrap extends Component {
     if (playerShips.length !== 1) return { ok: false, message: `我方挂载点必须且只能包含一个飞船视图，当前为 ${playerShips.length} 个` };
     if (enemyShips.length !== 1) return { ok: false, message: `敌方挂载点必须且只能包含一个飞船视图，当前为 ${enemyShips.length} 个` };
     if (battleHuds.length !== 1) return { ok: false, message: `战斗场景必须且只能包含一个战斗界面，当前为 ${battleHuds.length} 个` };
+    if (!isUsableComponent(this.playerShipView) || !isUsableComponent(this.enemyShipView) || !isUsableComponent(this.battleHud)) {
+      return { ok: false, message: '战斗场景 Bootstrap 引用未持久绑定' };
+    }
+    if (playerShips[0] !== this.playerShipView || enemyShips[0] !== this.enemyShipView || battleHuds[0] !== this.battleHud) {
+      return { ok: false, message: '战斗场景 Bootstrap 引用与持久挂载点不一致' };
+    }
+    const source = this.getComponent(GameConfigCsvSource);
+    if (source === null || !source.hasCompleteBinding() || !source.resolve().ok) {
+      return { ok: false, message: '战斗场景应用根缺少完整且有效的九张权威 CSV 来源' };
+    }
+    if (playerShips[0].configSource !== source || enemyShips[0].configSource !== source) {
+      return { ok: false, message: '战斗场景双方飞船未共同指向应用根权威 CSV 来源' };
+    }
 
     const playerState = playerShips[0].getAuthoringInspectorState();
     const enemyState = enemyShips[0].getAuthoringInspectorState();
@@ -74,27 +88,32 @@ export class BattleSceneBootstrap extends Component {
     if (!enemyState.ok) return { ok: false, message: `敌方飞船无效：${enemyState.message}` };
     if (playerState.shipId === enemyState.shipId) return { ok: false, message: '我方和敌方飞船实例标识不能相同' };
 
-    playerMount.setPosition(-260, -40, 0);
-    enemyMount.setPosition(260, 40, 0);
-    playerShips[0].node.setPosition(0, 0, 0);
-    enemyShips[0].node.setPosition(0, 0, 0);
+    // 世界根与双方挂载点的位置由创作工具通过公开 set-property 持久化；
+    // 这里仅校验引用和重复 ShipView，不在运行期/预览期覆盖场景布局。
     setUiLayerRecursively(worldRoot);
-    this.playerShipView = playerShips[0];
-    this.enemyShipView = enemyShips[0];
-    this.battleHud = battleHuds[0];
     return { ok: true, message: '战斗场景引用已连接' };
   }
 
   protected start(): void {
+    if (EDITOR_NOT_IN_PREVIEW) return;
     configureGameDisplay();
-    const resolved = this.resolvePersistedSceneReferences();
-    if (resolved.ok) {
-      this.playerShipView = resolved.playerShipView;
-      this.enemyShipView = resolved.enemyShipView;
-      this.battleHud = resolved.battleHud;
+    // BattleScene 的跨节点引用必须由编辑器公开 set-property 持久化；运行时不扫描场景树补齐。
+    if (!isUsableComponent(this.playerShipView) || !isUsableComponent(this.enemyShipView) || !isUsableComponent(this.battleHud)) {
+      error('[BOOT] 战斗场景 Bootstrap 引用未持久绑定：请在场景装配组件中绑定我方飞船、敌方飞船和战斗界面');
+      return;
     }
-    if (this.playerShipView === null || this.enemyShipView === null || this.battleHud === null) {
-      error('[BOOT] 请在战斗场景装配组件中绑定我方飞船、敌方飞船和战斗界面');
+    const source = this.getComponent(GameConfigCsvSource);
+    if (source === null || !source.hasCompleteBinding()) {
+      error('[BOOT] 战斗场景应用根缺少完整的九张权威 CSV 来源');
+      return;
+    }
+    const sourceResult = source.resolve();
+    if (sourceResult.ok === false) {
+      error(`[BOOT] 战斗场景权威 CSV 校验失败：${sourceResult.message}`);
+      return;
+    }
+    if (this.playerShipView.configSource !== source || this.enemyShipView.configSource !== source) {
+      error('[BOOT] 战斗场景双方飞船未共同指向应用根权威 CSV 来源');
       return;
     }
     const player = this.playerShipView.getAuthoringInspectorState();
@@ -111,19 +130,6 @@ export class BattleSceneBootstrap extends Component {
     log(`[BOOT] 战斗场景已隔离绑定：我方=${player.shipId}，敌方=${enemy.shipId}`);
   }
 
-  private resolvePersistedSceneReferences():
-    | { readonly ok: true; readonly playerShipView: ShipView; readonly enemyShipView: ShipView; readonly battleHud: BattleHUD }
-    | { readonly ok: false } {
-    const scene = this.node.scene;
-    const worldRoot = findDescendant(scene, '世界根');
-    const playerMount = findDescendant(worldRoot, '我方飞船挂载点');
-    const enemyMount = findDescendant(worldRoot, '敌方飞船挂载点');
-    const playerShips = playerMount?.getComponentsInChildren(ShipView) ?? [];
-    const enemyShips = enemyMount?.getComponentsInChildren(ShipView) ?? [];
-    const huds = scene?.getComponentsInChildren(BattleHUD) ?? [];
-    if (playerShips.length !== 1 || enemyShips.length !== 1 || huds.length !== 1) return { ok: false };
-    return { ok: true, playerShipView: playerShips[0], enemyShipView: enemyShips[0], battleHud: huds[0] };
-  }
 }
 
 function findDescendant(root: Node | null | undefined, name: string): Node | null {
@@ -139,4 +145,8 @@ function findDescendant(root: Node | null | undefined, name: string): Node | nul
 function setUiLayerRecursively(node: Node): void {
   node.layer = Layers.Enum.UI_2D;
   for (const child of node.children) setUiLayerRecursively(child);
+}
+
+function isUsableComponent(component: Component | null): component is Component {
+  return component !== null && component.isValid && component.node !== null && component.node.isValid;
 }

@@ -6,7 +6,7 @@ import { NavigationGraph, stationNodeId } from '../../assets/scripts/game-core/N
 import type { RoomPlacement } from '../../assets/scripts/game-core/ShipGridModel.ts';
 
 function room(id: string, category: RoomDefinition['category'], crewCapacity: number): RoomDefinition {
-  return { id: id.replace(/-1$/, ''), displayName: id, category, width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, powerGeneration: 0, crewCapacity };
+  return { id: id.replace(/-1$/, ''), displayName: id, category, width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, powerGeneration: 0, crewCapacity, healingHpPerTick: 0 };
 }
 
 const PLACEMENTS: readonly RoomPlacement[] = [

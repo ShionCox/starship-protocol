@@ -54,9 +54,12 @@ test('启动场景骨架保持最小并只挂载启动装配组件', async () =>
   restoreEditor();
   assert.equal(result.ok, true, result.message);
   const names = scene.calls.filter(([kind]) => kind === 'node').map(([, name]) => name);
-  assert.deepEqual(names, ['主相机', '画布', '应用根']);
+  assert.deepEqual(names, ['主相机', '画布', '启动装配']);
   assert.equal(scene.calls.some((call) => call[0] === 'component' && call[1] === 'BootSceneBootstrap'), true);
   assert.equal(scene.calls.some((call) => call[0] === 'component' && call[1] === 'CameraController'), false);
+  const canvas = scene.root.children.find((node) => node.name === '画布');
+  assert.equal(canvas.children.some((node) => node.name === '启动装配'), true);
+  assert.equal(scene.root.children.some((node) => node.name === '启动装配'), false);
 });
 
 test('主场景骨架只创建持久中文节点并绑定镜头引用', async () => {
@@ -70,6 +73,7 @@ test('主场景骨架只创建持久中文节点并绑定镜头引用', async ()
   assert.equal(scene.calls.some((call) => call[0] === 'component' && call[1] === 'MainSceneBootstrap'), true);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'worldRoot'), true);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'canvasRoot'), true);
+  assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'camera' && call[3]?.type === 'cc.Camera'), true);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'orthoHeight' && call[3] === 360), true);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'visibility' && call[3] === 1_107_296_256), true);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'clearFlags' && call[3] === 7), true);

@@ -1,0 +1,4 @@
+﻿id,displayName,effectType,effectValue
+#稳定标识,中文名称,效果类型,效果数值
+trait-construction-speed-250,施工速度提升25%,CONSTRUCTION_SPEED_PERMILLE,250
+trait-construction-slot-1,施工槽位增加1,CONSTRUCTION_SLOT_BONUS,1

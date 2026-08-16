@@ -1,5 +1,4 @@
-import type { RoomPrefabCatalogEntry } from './rooms/discover-room-prefabs';
-import type { CrewPrefabCatalogEntry } from './crew/discover-crew-prefabs';
+import type { EditorRoomCatalogEntry as RoomPrefabCatalogEntry, EditorCrewCatalogEntry as CrewPrefabCatalogEntry } from './csv/editor-catalog';
 import { isSceneNodeName, type SceneNodeKey } from './scene/scene-names';
 import {
   componentTypeMatches,
@@ -33,6 +32,7 @@ export interface AuthoringRoomSelection extends AuthoringNodeBase {
   readonly instanceId?: string;
   readonly definitionId?: string;
   readonly gridPosition?: { readonly x: number; readonly y: number };
+  readonly initialHp?: number;
   readonly validation: { readonly ok: boolean; readonly message: string };
   readonly definitionFound: boolean;
 }
@@ -45,6 +45,9 @@ export interface AuthoringCrewSelection extends AuthoringNodeBase {
   readonly definitionId?: string;
   readonly initialRoomInstanceId?: string;
   readonly initialStationIndex?: number;
+  readonly initialHp?: number;
+  readonly nameMode?: string;
+  readonly callSign?: string;
   readonly validation: { readonly ok: boolean; readonly message: string };
   readonly definitionFound: boolean;
 }
@@ -138,6 +141,9 @@ async function recognizeCrewInstance(context: AuthoringObjectRecognizerContext):
     definitionId,
     initialRoomInstanceId: normalizeOptionalString(inspector.initialRoomInstanceId),
     initialStationIndex: typeof inspector.initialStationIndex === 'number' && Number.isInteger(inspector.initialStationIndex) ? inspector.initialStationIndex : undefined,
+    initialHp: typeof inspector.initialHp === 'number' && Number.isInteger(inspector.initialHp) ? inspector.initialHp : undefined,
+    nameMode: normalizeOptionalString(inspector.nameMode),
+    callSign: normalizeOptionalString(inspector.callSign),
     validation: { ok: inspector.ok === true, message: typeof inspector.message === 'string' && inspector.message !== '' ? inspector.message : '未返回船员校验状态' },
     definitionFound: definitionId !== undefined && context.crews.some((entry) => entry.id === definitionId),
   };
@@ -165,6 +171,7 @@ async function recognizeRoomInstance(context: AuthoringObjectRecognizerContext):
     instanceId: normalizeOptionalString(inspector.roomInstanceId),
     definitionId,
     gridPosition: isGridPosition(inspector.gridPosition) ? inspector.gridPosition : undefined,
+    initialHp: typeof inspector.initialHp === 'number' && Number.isInteger(inspector.initialHp) ? inspector.initialHp : undefined,
     validation: {
       ok: inspector.ok === true,
       message: typeof inspector.message === 'string' && inspector.message !== '' ? inspector.message : '未返回房间校验状态',
@@ -218,6 +225,7 @@ interface RoomInspectorResult {
   readonly roomInstanceId?: unknown;
   readonly roomDefinitionId?: unknown;
   readonly gridPosition?: unknown;
+  readonly initialHp?: unknown;
 }
 
 interface CrewInspectorResult {
@@ -227,6 +235,9 @@ interface CrewInspectorResult {
   readonly crewDefinitionId?: unknown;
   readonly initialRoomInstanceId?: unknown;
   readonly initialStationIndex?: unknown;
+  readonly initialHp?: unknown;
+  readonly nameMode?: unknown;
+  readonly callSign?: unknown;
 }
 
 interface ShipInspectorResult {

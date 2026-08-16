@@ -30,6 +30,9 @@ pnpm-debug.log*
 coverage/
 *.tsbuildinfo
 extensions/starship-editor-tools/dist/
+.codegraph/
+.tmp-*.log
+extensions/starship-editor-tools/.tmp-*.log
 
 # 本地环境变量和临时密钥
 .env

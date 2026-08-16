@@ -7,7 +7,7 @@ import type {
   SceneQueryPort,
 } from '../shared/editor-scene';
 import { componentTypeMatches, getSceneComponentTarget, getSceneComponentUuid } from '../shared/editor-scene';
-import type { RoomPrefabCatalogEntry } from './discover-room-prefabs';
+import type { EditorRoomCatalogEntry as RoomPrefabCatalogEntry } from '../csv/editor-catalog';
 import { isSceneNodeName } from '../scene/scene-names';
 
 export interface RoomSceneAuthoringResult {
@@ -198,9 +198,8 @@ export async function createRoomInstance(
     const placementMessage = '已按目标飞船逻辑网格放置';
     return { ok: true, message: `已创建 ${entry.displayName}，${placementMessage}，实例 ID：${instanceId}`, nodeUuid: createdUuid };
   } catch (error) {
-    if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     if (undoId !== undefined) await scene.cancelRecording(undoId).catch(() => undefined);
-    await scene.snapshotAbort().catch(() => undefined);
+    if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     return { ok: false, message: `${toMessage(error)}；已回滚临时房间节点` };
   }
 }

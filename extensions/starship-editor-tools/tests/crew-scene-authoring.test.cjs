@@ -75,6 +75,6 @@ test('船员初始站位应用失败时删除临时节点并取消 Undo', async 
   assert.equal(result.ok, false);
   assert.equal(port.calls.some(([name]) => name === 'remove'), true);
   assert.equal(port.calls.some(([name]) => name === 'cancel'), true);
-  assert.equal(port.calls.some(([name]) => name === 'abort'), true);
+  assert.equal(port.calls.some(([name]) => name === 'abort'), false);
   delete global.Editor;
 });

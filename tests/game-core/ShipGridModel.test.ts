@@ -37,11 +37,11 @@ test('拒绝空实例/定义ID、非整数、越界、重叠和重复实例', ()
   expectError(grid.placeRoom(placement('room-a-1', 'room-a', 4, 4)), 'DUPLICATE_ROOM_ID');
 });
 
-test('非矩形船体拒绝占用无效格，非法Mask拒绝构造', () => {
-  const mask = [1, 1, 0, 1, 0, 0];
+test('非矩形船体拒绝占用虚空或固定墙，非法格表拒绝构造', () => {
+  const mask = ['BUILDABLE', 'BUILDABLE', 'VOID', 'BUILDABLE', 'FIXED_WALL', 'VOID'] as const;
   const grid = new ShipGridModel(hull('hull-mask', 3, 2, mask));
   expectError(grid.placeRoom(placement('room-a-1', 'room-a', 0, 0)), 'INVALID_HULL_CELL');
-  assert.throws(() => new ShipGridModel({ ...hull(), validCells: [1] }), RangeError);
+  assert.throws(() => new ShipGridModel({ ...hull(), cellTypes: ['BUILDABLE'] }), RangeError);
 });
 
 test('房间上限由船体定义控制', () => {

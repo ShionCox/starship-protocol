@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "id": "crew-gunner",
-  "displayName": "武器操作员",
-  "role": "GUNNER",
-  "maxHp": 100,
-  "moveTicksPerEdge": 5
-}

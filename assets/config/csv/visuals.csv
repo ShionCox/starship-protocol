@@ -1,0 +1,15 @@
+﻿id,displayName,kind,assetPath,imageWidth,imageHeight,frameCount,pivot,filter,playbackMode,fps,taskFps,idleFrameIndex,displayScalePermille,gridOffsetX,gridOffsetY
+#稳定标识,中文名称,类型,项目内资源路径,图片宽,图片高,帧数,脚底锚点,贴图过滤,播放模式,播放帧率,任务帧率,静置帧索引,显示缩放千分比,网格横向偏移,网格纵向偏移
+visual-pss-room-elevator-83,电梯房间,ROOM,assets/textures/pss/source/83.png,104,104,1,CENTER,NEAREST,STATIC,1,1,0,1000,0,0
+visual-room-stairs-placeholder,楼梯房间（占位外观）,ROOM,assets/textures/pss/source/83.png,104,104,1,CENTER,NEAREST,STATIC,1,1,0,1000,0,0
+visual-pss-room-reactor-808,反应堆房间,ROOM,assets/textures/pss/source/808.png,202,202,5,CENTER,NEAREST,ALWAYS_LOOP,6,6,0,1000,0,0
+visual-pss-room-laser-8285,激光室,ROOM,assets/textures/pss/source/8285.png,350,50,7,CENTER,NEAREST,POWERED_LOOP,6,6,0,1000,0,0
+visual-pss-room-shield-8041,护盾室,ROOM,assets/textures/pss/source/8041.png,300,100,6,CENTER,NEAREST,POWERED_LOOP,6,6,0,1000,0,0
+visual-pss-room-medbay-1107,医疗室,ROOM,assets/textures/pss/source/1107.png,50,50,1,CENTER,NEAREST,STATIC,1,1,0,1000,0,0
+appearance-pss-engineer-bob-8,工程师鲍勃外观,CREW,assets/textures/pss/crew/appearance-pss-engineer-bob-8.png,64,32,2,BOTTOM_CENTER,NEAREST,STATE_DRIVEN,6,4,0,1000,0,0
+appearance-pss-gunner-bobby-240,联邦鲍比外观,CREW,assets/textures/pss/crew/appearance-pss-gunner-bobby-240.png,64,32,2,BOTTOM_CENTER,NEAREST,STATE_DRIVEN,6,4,0,1000,0,0
+appearance-pss-medic-doctor-dong-153,董医生外观,CREW,assets/textures/pss/crew/appearance-pss-medic-doctor-dong-153.png,64,32,2,BOTTOM_CENTER,NEAREST,STATE_DRIVEN,6,4,0,1000,0,0
+appearance-pss-soldier-government-45,联邦部队外观,CREW,assets/textures/pss/crew/appearance-pss-soldier-government-45.png,64,32,2,BOTTOM_CENTER,NEAREST,STATE_DRIVEN,6,4,0,1000,0,0
+visual-hull-starter,初始护卫舰船体,HULL,assets/textures/pss/ship/hull-starter-4324.png,500,250,1,CENTER,NEAREST,STATIC,1,1,0,1000,0,0
+visual-hull-raider,掠袭舰船体,HULL,assets/textures/pss/ship/hull-raider-261.png,400,250,1,CENTER,NEAREST,STATIC,1,1,0,1000,0,0
+visual-floor-basic,基础地板,FLOOR,assets/textures/pss/source/83.png,104,104,1,CENTER,NEAREST,STATIC,1,1,0,1000,0,0

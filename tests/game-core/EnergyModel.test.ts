@@ -28,9 +28,9 @@ test('能源产能按有效房间求和，合法分配原子提交', () => {
 
 test('按房间实例 ID 映射已解析定义，旧产能缺省为 0', () => {
   const rooms = createEnergyRooms(new Map([
-    ['room-shield-1', { id: 'room-shield', displayName: '护盾室', category: 'DEFENSE', width: 2, height: 2, maxLevel: 1, maxHp: 120, minPower: 2, maxPower: 6, powerGeneration: 0, crewCapacity: 2 }],
-    ['room-reactor-1', { id: 'room-reactor', displayName: '反应堆', category: 'ENERGY', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, powerGeneration: 10, crewCapacity: 0 }],
-    ['room-laser-1', { id: 'room-laser', displayName: '激光室', category: 'WEAPON', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 2, maxPower: 6, powerGeneration: 0, crewCapacity: 2 }],
+    ['room-shield-1', { id: 'room-shield', displayName: '护盾室', category: 'DEFENSE', width: 2, height: 2, maxLevel: 1, maxHp: 120, minPower: 2, maxPower: 6, powerGeneration: 0, crewCapacity: 2, healingHpPerTick: 0 }],
+    ['room-reactor-1', { id: 'room-reactor', displayName: '反应堆', category: 'ENERGY', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 0, maxPower: 0, powerGeneration: 10, crewCapacity: 0, healingHpPerTick: 0 }],
+    ['room-laser-1', { id: 'room-laser', displayName: '激光室', category: 'WEAPON', width: 2, height: 2, maxLevel: 1, maxHp: 100, minPower: 2, maxPower: 6, powerGeneration: 0, crewCapacity: 2, healingHpPerTick: 0 }],
   ]));
   assert.deepEqual(rooms, [
     { id: 'room-laser-1', powerGeneration: 0, minPower: 2, maxPower: 6 },

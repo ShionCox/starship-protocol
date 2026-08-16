@@ -1,0 +1,109 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "c31103c8-2aad-476c-930b-707d1366ea22",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "20520": {
+      "importer": "sprite-frame",
+      "uuid": "c31103c8-2aad-476c-930b-707d1366ea22@20520",
+      "displayName": "",
+      "id": "20520",
+      "name": "appearance-pss-gunner-bobby-240-frame-001",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 32,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "6a094345-fd5a-43e0-b7b2-68fb7e5e7c19@6c48a",
+        "atlasUuid": "c31103c8-2aad-476c-930b-707d1366ea22",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "4f0e5": {
+      "importer": "sprite-frame",
+      "uuid": "c31103c8-2aad-476c-930b-707d1366ea22@4f0e5",
+      "displayName": "",
+      "id": "4f0e5",
+      "name": "appearance-pss-gunner-bobby-240-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "6a094345-fd5a-43e0-b7b2-68fb7e5e7c19@6c48a",
+        "atlasUuid": "c31103c8-2aad-476c-930b-707d1366ea22",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "appearance-pss-gunner-bobby-240.png",
+    "format": 2,
+    "uuid": "c31103c8-2aad-476c-930b-707d1366ea22",
+    "textureUuid": "6a094345-fd5a-43e0-b7b2-68fb7e5e7c19@6c48a"
+  }
+}

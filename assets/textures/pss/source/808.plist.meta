@@ -1,0 +1,247 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "a7a34": {
+      "importer": "sprite-frame",
+      "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d@a7a34",
+      "displayName": "",
+      "id": "a7a34",
+      "name": "visual-pss-room-reactor-808-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 100,
+        "height": 50,
+        "rawWidth": 100,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "e89d70c4-7841-40a6-b629-30bf56697467@6c48a",
+        "atlasUuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "fbd6b": {
+      "importer": "sprite-frame",
+      "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d@fbd6b",
+      "displayName": "",
+      "id": "fbd6b",
+      "name": "visual-pss-room-reactor-808-frame-001",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 101,
+        "trimY": 0,
+        "width": 100,
+        "height": 50,
+        "rawWidth": 100,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "e89d70c4-7841-40a6-b629-30bf56697467@6c48a",
+        "atlasUuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "2c363": {
+      "importer": "sprite-frame",
+      "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d@2c363",
+      "displayName": "",
+      "id": "2c363",
+      "name": "visual-pss-room-reactor-808-frame-002",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 51,
+        "width": 100,
+        "height": 50,
+        "rawWidth": 100,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "e89d70c4-7841-40a6-b629-30bf56697467@6c48a",
+        "atlasUuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "b2a02": {
+      "importer": "sprite-frame",
+      "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d@b2a02",
+      "displayName": "",
+      "id": "b2a02",
+      "name": "visual-pss-room-reactor-808-frame-003",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 101,
+        "trimY": 51,
+        "width": 100,
+        "height": 50,
+        "rawWidth": 100,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "e89d70c4-7841-40a6-b629-30bf56697467@6c48a",
+        "atlasUuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "8c839": {
+      "importer": "sprite-frame",
+      "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d@8c839",
+      "displayName": "",
+      "id": "8c839",
+      "name": "visual-pss-room-reactor-808-frame-004",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 102,
+        "width": 100,
+        "height": 50,
+        "rawWidth": 100,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "e89d70c4-7841-40a6-b629-30bf56697467@6c48a",
+        "atlasUuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "808.png",
+    "format": 2,
+    "uuid": "43b70cb3-3d15-41f7-9ca6-2f870c62c81d",
+    "textureUuid": "e89d70c4-7841-40a6-b629-30bf56697467@6c48a"
+  }
+}

@@ -1,15 +1,10 @@
 import {
   _decorator,
   Button,
-  Color,
   Component,
-  Graphics,
+  error,
   Label,
-  Layers,
   Node,
-  UITransform,
-  HorizontalTextAlignment,
-  VerticalTextAlignment,
 } from 'cc';
 
 import type { EnergyCommand } from '../game-core/EnergyModel';
@@ -43,29 +38,11 @@ export class PowerRoomRow extends Component {
   private power = 0;
   private dispatch: ((command: EnergyCommand) => void) | null = null;
 
-  /** 仅供创作插件补齐可持久保存的能源行 Prefab，不作为运行时兜底。 */
-  public ensureAuthoringPrefabStructure(roomInstanceId: string, displayName: string): boolean {
-    this.node.layer = Layers.Enum.UI_2D;
-    this.roomInstanceId = roomInstanceId;
-    if (this.getComponent(UITransform) === null) this.addComponent(UITransform).setContentSize(288, 38);
-    this.roomNameLabel = ensureLabel(this.node, '房间名称', displayName, -92, 112);
-    this.powerLabel = ensureLabel(this.node, '当前能源', '0 / 6', 8, 72);
-    this.decreaseButton = ensureButton(this.node, '减少按钮', '−', 76, 30);
-    this.increaseButton = ensureButton(this.node, '增加按钮', '+', 106, 30);
-    this.resetButton = ensureButton(this.node, '断电按钮', '断电', 148, 48);
-    this.registerEvents();
-    return true;
-  }
-
-  /** 仅供创作插件设置 Prefab 实例在能源面板内的局部位置。 */
-  public applyAuthoringLocalPosition(x: number, y: number): boolean {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-    this.node.setPosition(x, y, 0);
-    return true;
-  }
-
   protected onEnable(): void {
     this.refreshSerializedReferences();
+    if (this.roomNameLabel === null || this.powerLabel === null || this.decreaseButton === null || this.increaseButton === null || this.resetButton === null) {
+      error('能源房间行 Prefab 缺少持久文字或按钮引用，运行时不会重建行结构。');
+    }
     this.registerEvents();
   }
 
@@ -75,7 +52,6 @@ export class PowerRoomRow extends Component {
 
   private registerEvents(): void {
     this.unregisterEvents();
-    this.drawButtons();
     this.decreaseButton?.node.on(Node.EventType.TOUCH_END, this.handleDecrease, this);
     this.increaseButton?.node.on(Node.EventType.TOUCH_END, this.handleIncrease, this);
     this.resetButton?.node.on(Node.EventType.TOUCH_END, this.handleReset, this);
@@ -124,28 +100,6 @@ export class PowerRoomRow extends Component {
     if (this.decreaseButton !== null) this.decreaseButton.interactable = this.power > 0;
     if (this.increaseButton !== null) this.increaseButton.interactable = this.power < this.room.maxPower;
     if (this.resetButton !== null) this.resetButton.interactable = this.power > 0;
-    this.drawButtons();
-  }
-
-  private drawButtons(): void {
-    for (const button of [this.decreaseButton, this.increaseButton, this.resetButton]) {
-      const buttonNode = button?.node ?? null;
-      if (buttonNode === null) continue;
-      const transform = buttonNode.getComponent(UITransform);
-      const graphics = buttonNode.getComponent(Graphics);
-      if (transform === null || graphics === null) continue;
-      const { width, height } = transform.contentSize;
-      graphics.clear();
-      graphics.fillColor = button.interactable
-        ? new Color(42, 91, 118, 245)
-        : new Color(45, 55, 65, 210);
-      graphics.roundRect(-width / 2, -height / 2, width, height, 4);
-      graphics.fill();
-      graphics.lineWidth = 1;
-      graphics.strokeColor = new Color(92, 187, 220, 255);
-      graphics.roundRect(-width / 2, -height / 2, width, height, 4);
-      graphics.stroke();
-    }
   }
 
   /**
@@ -159,40 +113,4 @@ export class PowerRoomRow extends Component {
     this.increaseButton = this.node.getChildByName('增加按钮')?.getComponent(Button) ?? null;
     this.resetButton = this.node.getChildByName('断电按钮')?.getComponent(Button) ?? null;
   }
-}
-
-function ensureLabel(parent: Node, name: string, text: string, x: number, width: number): Label {
-  const existing = parent.getChildByName(name);
-  const node = existing ?? new Node(name);
-  if (existing === null) {
-    parent.addChild(node);
-    node.setPosition(x, 0, 0);
-    node.addComponent(UITransform).setContentSize(width, 30);
-  }
-  node.layer = Layers.Enum.UI_2D;
-  const label = node.getComponent(Label) ?? node.addComponent(Label);
-  if (existing === null) {
-    label.string = text;
-    label.fontSize = 14;
-    label.lineHeight = 24;
-    label.horizontalAlign = HorizontalTextAlignment.CENTER;
-    label.verticalAlign = VerticalTextAlignment.CENTER;
-    label.color = new Color(230, 240, 248, 255);
-  }
-  return label;
-}
-
-function ensureButton(parent: Node, name: string, text: string, x: number, width: number): Button {
-  const existing = parent.getChildByName(name);
-  const node = existing ?? new Node(name);
-  if (existing === null) {
-    parent.addChild(node);
-    node.setPosition(x, 0, 0);
-    node.addComponent(UITransform).setContentSize(width, 30);
-  }
-  node.layer = Layers.Enum.UI_2D;
-  node.getComponent(Graphics) ?? node.addComponent(Graphics);
-  const button = node.getComponent(Button) ?? node.addComponent(Button);
-  ensureLabel(node, '文字', text, 0, width);
-  return button;
 }

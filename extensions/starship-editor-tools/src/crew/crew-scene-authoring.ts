@@ -9,13 +9,14 @@ import {
   type SceneNodeTree,
   type SceneQueryPort,
 } from '../shared/editor-scene';
-import type { CrewPrefabCatalogEntry } from './discover-crew-prefabs';
+import type { EditorCrewCatalogEntry as CrewPrefabCatalogEntry } from '../csv/editor-catalog';
 
 /** 船员场景实例化只进入所选房间所属飞船的“船员层”，并保持 Prefab 关联和单次 Undo。 */
 export async function createCrewInstance(
   scene: SceneQueryPort,
   context: SceneSelectionContext,
   entry: CrewPrefabCatalogEntry,
+  identity: { readonly nameMode?: string; readonly callSign?: string } = {},
 ): Promise<{ readonly ok: boolean; readonly message: string; readonly nodeUuid?: string }> {
   const tree = await scene.queryNodeTree();
   const classes = scene.queryComponents === undefined ? [] : await scene.queryComponents().catch(() => []);
@@ -44,6 +45,9 @@ export async function createCrewInstance(
     if (!(await scene.setProperty(target, 'crewInstanceId', instanceId, { record: false }))) throw new Error('无法写入船员实例 ID');
     if (!(await scene.setProperty(target, 'initialRoomInstanceId', targetRoom.roomInstanceId, { record: false }))) throw new Error('无法写入船员初始房间');
     if (!(await scene.setProperty(target, 'initialStationIndex', stationIndex, { record: false }))) throw new Error('无法写入船员初始站位');
+    const nameMode = identity.nameMode === 'FIXED' ? 'FIXED' : 'GENERATED';
+    if (!(await scene.setProperty(target, 'nameMode', nameMode, { record: false }))) throw new Error('无法写入船员命名方式');
+    if (nameMode === 'FIXED' && !(await scene.setProperty(target, 'callSign', (identity.callSign ?? '').trim(), { record: false }))) throw new Error('无法写入船员指定名称');
     const placed = await scene.executeComponentMethod(target.uuid, 'applyEditorInitialPlacement', []);
     if (placed !== true) throw new Error('无法把船员放到编辑器初始站位');
     await scene.endRecording(undoId);
@@ -51,9 +55,8 @@ export async function createCrewInstance(
     selectNode(createdUuid);
     return { ok: true, message: `已创建 ${entry.displayName}，实例 ID：${instanceId}`, nodeUuid: createdUuid };
   } catch (cause) {
-    if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     if (undoId !== undefined) await scene.cancelRecording(undoId).catch(() => undefined);
-    await scene.snapshotAbort().catch(() => undefined);
+    if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     return { ok: false, message: `${cause instanceof Error ? cause.message : String(cause)}；已回滚临时船员节点` };
   }
 }

@@ -20,6 +20,13 @@ const VALID_REACTOR: RoomDefinitionDocument = {
   maxPower: 0,
   powerGeneration: 10,
   crewCapacity: 0,
+  healingHpPerTick: 0,
+  verticalConnectorKind: 'NONE',
+  visualId: 'visual-room-reactor',
+  metalCost: 150,
+  buildDurationMs: 30000,
+  demolishDurationMs: 10000,
+  refundPermille: 500,
 };
 
 test('解析合法的版本化房间定义', () => {
@@ -38,20 +45,26 @@ test('解析合法的版本化房间定义', () => {
       maxPower: 0,
       powerGeneration: 10,
       crewCapacity: 0,
+      healingHpPerTick: 0,
+      verticalConnectorKind: 'NONE',
+      visualId: 'visual-room-reactor',
+      metalCost: 150,
+      buildDurationMs: 30000,
+      demolishDurationMs: 10000,
+      refundPermille: 500,
     });
   }
 });
 
-test('旧配置缺失能源产能时按 0 兼容', () => {
-  const result = parseRoomDefinition({ ...VALID_REACTOR, powerGeneration: undefined });
-  assert.equal(result.ok, true);
-  if (result.ok) assert.equal(result.definition.powerGeneration, 0);
+test('旧版本和缺失权威施工字段直接拒绝', () => {
+  assert.equal(parseRoomDefinition({ ...VALID_REACTOR, schemaVersion: 2 }).ok, false);
+  assert.equal(parseRoomDefinition({ ...VALID_REACTOR, metalCost: undefined }).ok, false);
 });
 
 test('拒绝非对象和不支持的 schemaVersion', () => {
   assert.equal(parseRoomDefinition(null).ok, false);
   assert.equal(parseRoomDefinition([]).ok, false);
-  const result = parseRoomDefinition({ ...VALID_REACTOR, schemaVersion: 2 });
+  const result = parseRoomDefinition({ ...VALID_REACTOR, schemaVersion: 1 });
   assert.deepEqual(result.ok ? null : result.code, 'UNSUPPORTED_SCHEMA');
 });
 
@@ -90,9 +103,18 @@ test('拒绝非法等级、耐久、能源和船员容量', () => {
     { powerGeneration: -1 },
     { powerGeneration: 1.5 },
     { crewCapacity: 1.5 },
+    { healingHpPerTick: -1 },
+    { healingHpPerTick: 1.5 },
   ];
   for (const invalid of invalidValues) {
     const result = parseRoomDefinition({ ...VALID_REACTOR, ...invalid });
     assert.deepEqual(result.ok ? null : result.code, 'INVALID_NUMBER_RANGE');
   }
+});
+
+test('只有支援房间可以声明正治疗量', () => {
+  const medical = parseRoomDefinition({ ...VALID_REACTOR, id: 'room-medbay', displayName: '医疗室', category: 'SUPPORT', powerGeneration: 0, healingHpPerTick: 1 });
+  assert.equal(medical.ok, true);
+  const weapon = parseRoomDefinition({ ...VALID_REACTOR, category: 'WEAPON', powerGeneration: 0, healingHpPerTick: 1 });
+  assert.deepEqual(weapon.ok ? null : weapon.code, 'INVALID_NUMBER_RANGE');
 });

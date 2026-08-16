@@ -1,17 +1,12 @@
 import {
   _decorator,
-  Color,
   Component,
   error,
-  Graphics,
   Label,
-  Layers,
   ProgressBar,
+  Prefab,
+  instantiate,
   Node,
-  UITransform,
-  Widget,
-  HorizontalTextAlignment,
-  VerticalTextAlignment,
 } from 'cc';
 
 import {
@@ -60,46 +55,18 @@ export class PowerPanel extends Component {
   @property({ type: [PowerRoomRow], displayName: '能源房间行', tooltip: '按顺序引用面板中的能源房间行预制体实例。', group: '房间' })
   public roomRows: PowerRoomRow[] = [];
 
+  @property({ type: Prefab, displayName: '能源行模板', tooltip: '玩家新建耗能房间时实例化的 PowerRoomRow Prefab。', group: '房间' })
+  public roomRowTemplate: Prefab | null = null;
+
+  @property({ type: Node, displayName: '能源行容器', tooltip: '持久保存的动态能源行父节点。', group: '房间' })
+  public roomRowContainer: Node | null = null;
+
   private dispatch: PowerCommandHandler | null = null;
 
-  /** 仅供创作插件补齐可持久保存的面板节点；能源行随后由同一 PowerRoomRow Prefab 实例化。 */
-  public ensureAuthoringPrefabStructure(): boolean {
-    this.node.layer = Layers.Enum.UI_2D;
-    const existingTransform = this.getComponent(UITransform);
-    if (existingTransform === null) this.addComponent(UITransform).setContentSize(320, 220);
-    const existingWidget = this.getComponent(Widget);
-    if (existingWidget === null) {
-      const widget = this.addComponent(Widget);
-      widget.isAlignTop = true;
-      widget.isAlignRight = true;
-      widget.top = 16;
-      widget.right = 16;
-    }
-    this.getComponent(Graphics) ?? this.addComponent(Graphics);
-    this.summaryLabel = ensurePanelLabel(this.node, '能源汇总', '能源：0 / 10', 82, 18);
-    const existingProgress = this.node.getChildByName('能源进度条');
-    const progressNode = existingProgress ?? new Node('能源进度条');
-    if (existingProgress === null) {
-      this.node.addChild(progressNode);
-      progressNode.setPosition(0, 51, 0);
-      progressNode.addComponent(UITransform).setContentSize(288, 18);
-    }
-    progressNode.layer = Layers.Enum.UI_2D;
-    progressNode.getComponent(Graphics) ?? progressNode.addComponent(Graphics);
-    this.progressBar = progressNode.getComponent(ProgressBar) ?? progressNode.addComponent(ProgressBar);
-    this.statusLabel = ensurePanelLabel(this.node, '状态提示', '能源状态已就绪', -87, 12);
-    if (existingTransform === null) this.drawChrome();
-    return true;
-  }
-
-  /** Prefab 行替换完成后刷新序列化白名单引用。 */
-  public refreshAuthoringReferences(): boolean {
-    this.roomRows = this.getAttachedRoomRows();
-    return this.roomRows.length > 0;
-  }
-
   protected onEnable(): void {
-    // 面板外观由 Creator 中持久化的 Graphics 参数决定，运行时只刷新动态数值。
+    if (this.summaryLabel === null || this.progressBar === null || this.statusLabel === null || this.roomRowContainer === null || this.roomRowTemplate === null) {
+      error('能源面板 Prefab 缺少持久引用，运行时不会重建面板结构。');
+    }
   }
 
   public bind(
@@ -113,6 +80,7 @@ export class PowerPanel extends Component {
       return;
     }
     this.dispatch = dispatch;
+    this.synchronizeRows(rooms);
     this.roomRows = this.getAttachedRoomRows();
     const roomsById = new Map(rooms.map((room) => [room.roomId, room]));
     const missingRows = rooms.filter((room) => !this.roomRows.some((row) => row.roomInstanceId === room.roomId));
@@ -157,55 +125,30 @@ export class PowerPanel extends Component {
     return this.node.getComponentsInChildren(PowerRoomRow).filter((row) => row.node !== null);
   }
 
-  private drawChrome(): void {
-    const panelGraphics = this.getComponent(Graphics);
-    if (panelGraphics === null) {
-      error('[UI] 请在能源面板 Prefab 根节点持久挂载图形组件');
-      return;
+  private synchronizeRows(rooms: readonly PowerPanelRoom[]): void {
+    if (this.roomRowContainer === null) return;
+    const wanted = new Set(rooms.map((room) => room.roomId));
+    const existing = new Map(this.getAttachedRoomRows().map((row) => [row.roomInstanceId, row]));
+    for (const room of rooms) {
+      if (existing.has(room.roomId)) continue;
+      if (this.roomRowTemplate === null) {
+        error(`[UI] 能源面板缺少能源行模板，无法显示：${room.displayName}`);
+        continue;
+      }
+      const node = instantiate(this.roomRowTemplate);
+      node.name = `能源行-${room.roomId}`;
+      this.roomRowContainer.addChild(node);
+      const row = node.getComponent(PowerRoomRow);
+      if (row === null) {
+        node.destroy();
+        error('[UI] PowerRoomRow Prefab 缺少 PowerRoomRow 组件');
+        continue;
+      }
+      row.roomInstanceId = room.roomId;
     }
-    panelGraphics.clear();
-    panelGraphics.fillColor = new Color(7, 22, 35, 238);
-    panelGraphics.roundRect(-160, -110, 320, 220, 10);
-    panelGraphics.fill();
-    panelGraphics.lineWidth = 2;
-    panelGraphics.strokeColor = new Color(63, 166, 200, 255);
-    panelGraphics.roundRect(-160, -110, 320, 220, 10);
-    panelGraphics.stroke();
-
-    const progressGraphics = this.progressBar?.getComponent(Graphics);
-    const progressTransform = this.progressBar?.getComponent(UITransform);
-    if (progressGraphics === null || progressGraphics === undefined || progressTransform === null || progressTransform === undefined) return;
-    const { width, height } = progressTransform.contentSize;
-    const progress = Math.min(1, Math.max(0, this.progressBar?.progress ?? 0));
-    progressGraphics.clear();
-    progressGraphics.fillColor = new Color(25, 47, 61, 255);
-    progressGraphics.roundRect(-width / 2, -height / 2, width, height, 4);
-    progressGraphics.fill();
-    if (progress > 0) {
-      progressGraphics.fillColor = new Color(52, 197, 224, 255);
-      progressGraphics.roundRect(-width / 2, -height / 2, width * progress, height, 4);
-      progressGraphics.fill();
+    for (const row of existing.values()) {
+      if (!wanted.has(row.roomInstanceId)) row.node.destroy();
     }
   }
-}
 
-function ensurePanelLabel(parent: Node, name: string, text: string, y: number, fontSize: number): Label {
-  const existing = parent.getChildByName(name);
-  const node = existing ?? new Node(name);
-  if (existing === null) {
-    parent.addChild(node);
-    node.setPosition(0, y, 0);
-    node.addComponent(UITransform).setContentSize(288, 28);
-  }
-  node.layer = Layers.Enum.UI_2D;
-  const label = node.getComponent(Label) ?? node.addComponent(Label);
-  if (existing === null) {
-    label.string = text;
-    label.fontSize = fontSize;
-    label.lineHeight = 24;
-    label.horizontalAlign = HorizontalTextAlignment.CENTER;
-    label.verticalAlign = VerticalTextAlignment.CENTER;
-    label.color = new Color(230, 240, 248, 255);
-  }
-  return label;
 }

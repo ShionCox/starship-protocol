@@ -31,7 +31,7 @@
 
 - 当前仓库是位于根目录的 Cocos Creator 3.8.8 工程，不要为了匹配未来 monorepo 蓝图提前搬迁目录。
 - R0 技术验证已经完成并冻结为历史基线；当前目标是 **R1 客户端基础重构**，进度只看根目录 `R1-FOUNDATION-CHECKLIST.md`。
-- R1 已完成能源与单层船员移动规则；维修、武器、护盾效果、伤害、胜负、AI、Replay 和 PvE 仍未完成，不得把纵切误报为完整 R1。
+- R1 已完成能源、维修、医疗以及 P8 体素地板/跨层导航/施工规则的自动门槛；P7 角色动画持久绑定和 P8 完整施工/离线 Web 交互仍待人工收口，武器、护盾效果、伤害、胜负、通用 AI、Replay 和 PvE 仍未完成，不得把纵切误报为完整 R1。
 - 当前运行架构固定为 `BootScene / MainScene / BattleScene`、共享 `UIRoot.prefab` 和可复用 `ShipView.prefab`；一种船体不是一个 Scene。
 - 开发期只通过 `PlayerStatePort` 使用单一玩家状态 Envelope。旧 R0/R1 三个 localStorage Key 已废弃，不做迁移。
 - 当前继续把纯 TypeScript GameCore 放在 `assets/scripts/game-core/`；进入 R2 权威战斗服务前再评估抽取共享 package。
@@ -121,12 +121,15 @@
 - 网格化内容在编辑器中拖动时应自动吸附到项目逻辑网格；吸附只改变表现坐标，保存和规则校验仍使用 GameCore 整数逻辑坐标。
 - 批量内容创建、校验和未来关卡导出统一放在 `extensions/starship-editor-tools/` 项目扩展中；按房间、NPC、关卡分模块，不为每个领域复制插件宿主。
 - 编辑器扩展不是运行时依赖；插件关闭或加载失败时，游戏运行、存档、测试和构建必须不受影响。
-- 编辑器扩展只调用 Cocos 3.8 公开 Panel、Message、Asset DB 和 Scene API；禁止直接编辑 `.scene`、`.prefab`、`.meta` 序列化文本。资源管理器右键只创建 JSON + Prefab，场景骨架、房间实例和校验统一由可停靠“星舰创作工具”面板完成；层级选择只是面板读取的上下文，不是扩展入口。禁止私有 hierarchy API、`cce.*` 和 DOM 注入。
-- 房间 Prefab 保存表现，`assets/config/rooms/*.json` 保存版本化规则；新增房间通过 JSON 接入，不新增第二份 TypeScript 配置常量。
-- 房间资源由 JSON + Prefab 真实依赖自动发现；创作面板负责标准场景骨架和房间实例创建，不要求设计人员先创建空节点再手动挂组件。面板显示期间每 500ms 轮询公开 Selection，隐藏或关闭时停止，执行动作前必须重新校验选择。NPC、关卡等领域只有进入对应里程碑后才能注册菜单。
-- 创作面板采用领域分页、分类筛选、资源列表和中文属性检查器；已接入领域的规则字段必须支持直接编辑并通过公开 Asset DB 保存。稳定 ID、Prefab 引用和资源路径只读，保存前重新读取并校验 JSON，避免面板缓存覆盖外部修改。
+- 编辑器扩展只调用 Cocos 3.8 公开 Panel、Message、Asset DB 和 Scene API；禁止直接编辑 `.scene`、`.prefab`、`.meta` 序列化文本。资源管理器和创作面板只负责 CSV 行、Prefab 与实例的公开 API 操作；层级选择只是面板读取的上下文，不是扩展入口。禁止私有 hierarchy API、`cce.*` 和 DOM 注入。
+- P8 玩法定义的唯一权威源是 `assets/config/csv/` 下九张运行时 CSV（七张玩法表与两张视觉表）；编辑器另有不进入运行时的 `editor-prefabs.csv` 映射表。Prefab 只保存表现、稳定 `definitionId` 与共享 CSV `TextAsset` 引用，不保留第二份规则数值。
+- 房间、船员、船体、地板与连接器目录由整批 CSV 校验结果和 Prefab 映射生成；任一表头、稳定 ID、数值或跨表引用失败时整批拒绝。面板显示期间每 500ms 轮询公开 Selection，隐藏或关闭时停止，执行动作前必须重新校验选择。
+- 创作面板采用领域分页、分类筛选、资源列表和中文属性检查器；保存前重新读取九张运行时 CSV并连同 `editor-prefabs.csv` 做整体校验，通过后才按公开 Asset DB 顺序保存与重新导入，失败恢复本批已写入的原内容。
 - 创作工具可识别类型的稳定 ID、识别器顺序、白名单 DTO、只读/可写边界和接入检查表统一遵循 `项目规范包/docs/19-Cocos创作工具类型接入规范.md`；选择联动只在 UUID 变化时自动切页，禁止把原始组件 dump 或未注册类型自动暴露给面板。
-- `assets/config/**/*.json` 是 R1 创作与开发输入；运行时通过唯一 `GameConfigCatalog` 消费已验证定义。R2 正式配置分发在真实发布阶段重新实现。
+- `assets/config/csv/*.csv` 是 P8 起的 R1 创作与开发输入；运行时通过唯一 CSV 解析入口与 `GameConfigCatalog` 消费已验证定义。旧 JSON 不迁移且不得继续作为 P8 运行时权威；R2 正式配置分发在真实发布阶段重新实现。
+- 外部参考素材库固定为 `I:\WebProjects\pss_full`。该目录约 940 MB，包含 `data/` 中英文飞船、房间、船员、物品与导弹 JSON，`sprites/` 原始编号图片，以及 `sorted/room`、`sorted/crew`、`sorted/ship` 等分类素材；编号与中文名称优先通过 `data/_sprite_mapping.json` 核对。
+- `pss_full` 只作为只读候选素材库，不是本项目运行时依赖或规则来源。需要房间、船员、船体、装备等视觉参考时先在该库检索和预览，只把当前里程碑实际采用的少量文件复制到本项目对应 `assets/` 目录，再通过 Creator 导入并生成项目自己的 `.meta`；禁止全量搬运、直接引用库外路径、剪切或修改素材库原文件。
+- 从 `pss_full` 采用素材时必须记录原文件路径、用途和必要的裁切/改色处理；其中内容来源于 Pixel Starships 及相关 Wiki，正式发布或公开分发前必须复核版权与授权。`data/*.json` 只能用于设计参考和素材索引，不得绕过本项目 Definition schema、GameConfigCatalog 与稳定 ID 规则直接成为运行配置。
 - Boot 首包保持最小；战斗资源按需预加载并及时释放。
 - 业务输入统一映射为 Action；GameCore 只接收 Command，不接收鼠标或触摸坐标。
 - 单个 Component 达到约 500～800 行时必须评估按职责拆分。

@@ -1,0 +1,6 @@
+﻿id,displayName,roomDefinitionId,stopY,entrySide,verticalMoveTicks
+#稳定标识,中文名称,房间定义标识,停靠纵坐标,进入侧,垂直移动Tick数
+port-elevator-lower,电梯下层停靠口,room-elevator,1,RIGHT,5
+port-elevator-upper,电梯上层停靠口,room-elevator,5,RIGHT,5
+port-stairs-lower,楼梯下层入口,room-stairs,1,LEFT,8
+port-stairs-upper,楼梯上层入口,room-stairs,5,LEFT,8

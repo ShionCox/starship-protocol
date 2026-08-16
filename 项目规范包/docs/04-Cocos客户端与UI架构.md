@@ -39,7 +39,7 @@ MainScene
 │  ├─ 世界根
 │  │  └─ 当前飞船挂载点 → ShipView.prefab
 │  └─ UIRoot.prefab（主界面模式）
-└─ 应用根 → MainSceneBootstrap
+└─ 应用根 → MainSceneBootstrap + 唯一 GameConfigCsvSource
 
 BattleScene
 ├─ 主相机
@@ -51,7 +51,7 @@ BattleScene
 │  │  ├─ 弹道层
 │  │  └─ 特效层
 │  └─ 同一 UIRoot.prefab（战斗界面模式）
-└─ 应用根 → BattleSceneBootstrap
+└─ 应用根 → BattleSceneBootstrap + 唯一 GameConfigCsvSource
 ```
 
 一种船体不是一个 Scene。`ShipView.prefab` 依据 `{ shipId, HullDefinition, ShipSnapshot }` 绑定船体外观、网格、房间和船员；敌我双方使用同一个 View 实现。
@@ -67,17 +67,26 @@ BattleScene
 - 船体规则网格来自 HullDefinition；ShipView 只持有格子像素尺寸、颜色和子节点引用等表现配置。
 - 设计人员从项目菜单或 Panel 菜单打开“星舰创作工具”，在面板中补齐 Boot/Main/Battle 中文骨架、创建船体/飞船/房间/船员并刷新校验。
 - 新骨架只识别中文语义名。旧 Prototype 英文别名和运行时兼容补齐链已经删除。
-- Bootstrap 只连接已序列化引用。缺少 ShipView、UIRoot、Panel 或关键组件时中文报错并停止，不动态创建任何正式节点。
-- MainScene 启动后通过 `director.preloadScene('BattleScene')` 低优先级预加载战斗场景；BootScene 与 BattleScene 启用场景资源自动释放，MainScene 保留常用页面资源。自定义 Asset Bundle 等动态资源和包体规模出现实际需求后再接入。
+- Bootstrap 只连接已序列化引用。缺少 ShipView、UIRoot、Panel 或关键组件时中文报错并停止；唯一的运行时 UI 节点创建是本 ADR 规定的主页面 Prefab 挂载，其他正式节点不得由脚本补建。
+- Main/Battle 的九张权威 CSV `TextAsset` 只在各自“应用根”的唯一 `GameConfigCsvSource` 持久保存；场景 ShipView 显式引用该来源，RoomView/CrewView 只从所属 ShipView 读取。BootScene 与独立领域 Prefab 不保存配置来源。
+- MainScene 启动后通过 `director.preloadScene('BattleScene')` 低优先级预加载战斗场景；页面实例按路由销毁，但页面 Prefab/贴图继续由 `main` Bundle 持有，不新增页面缓存或主动资源释放。自定义 Asset Bundle 等动态资源和包体规模出现实际需求后再接入。
 - Prefab、Inspector 中文字段、编辑器预览和吸附细则统一见 `05-资源与Prefab规范.md`；装饰器写法见 `15-编码与注释规范.md`。
 
 ## 7.2 UI 层级
 
 ```text
 UIRoot.prefab
-├─ HUD层
-├─ 页面层
+├─ 主界面内容根 → MainScreen.prefab
+│  ├─ 主导航栏 / 顶栏 / HUD 框架
+│  ├─ 页面挂载点（保存时为空）
+│  ├─ PowerPanel.prefab
+│  └─ CrewStatusPanel.prefab
+├─ 战斗界面内容根 → BattleHUD.prefab
 ├─ 弹窗层
+│  ├─ SettingsPopup.prefab
+│  ├─ WorldContextMenu.prefab
+│  ├─ DemolitionConfirmDialog.prefab
+│  └─ OfflineSettlementDialog.prefab
 ├─ 提示层
 └─ 加载层
 ```
@@ -100,6 +109,11 @@ UIRoot 不包含飞船、房间、船员、弹道或战斗特效。MainScene 与
 - `BattleHUD`
 - `BattleResultPopup`
 - `SettingsPopup`
+
+五个主页面 Prefab（`MainMenuPage`、`GalaxyMapPage`、`ShipMainPage`、`BuildPage`、`CrewPage`）只作为 `MainPageRouter` 的序列化资源引用，不保存页面实例。`MainPageRouter` 切页时使用 Cocos `instantiate(Prefab)` 挂入唯一“页面挂载点”，完成绑定后销毁旧页面；任何时刻最多一个活动页面实例，实例化或绑定失败时回滚到旧页面。
+`MainPageRouter` 每次只激活一个页面：主菜单/星图隐藏公共能源与船员状态，飞船显示二者，建造只显示建造页，船员显示船员页与状态面板；设置弹窗暂时隐藏公共面板，关闭后恢复打开前页面。设置弹窗、能源/船员面板、战斗 HUD 和其他弹窗是持久嵌套 Prefab，不随页面切换销毁。
+建造页挂载时由 `MainSceneBootstrap` 获取其 `BuildPageController` 并绑定最新快照；卸载时清空引用并执行 `onDisable()` 取消拖拽，再次进入时重置分类、滚动位置和卡片缓存。
+创作工具的页面预览在隔离 UIRoot Prefab 上执行，连接场景引用时恢复主菜单默认状态。
 
 ### P1/R2
 

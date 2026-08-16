@@ -1,0 +1,63 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "83e07b54-64eb-4d52-8014-c81577487226",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "9138c": {
+      "importer": "sprite-frame",
+      "uuid": "83e07b54-64eb-4d52-8014-c81577487226@9138c",
+      "displayName": "",
+      "id": "9138c",
+      "name": "visual-pss-room-medbay-1107-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 50,
+        "height": 50,
+        "rawWidth": 50,
+        "rawHeight": 50,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "9ecbc98f-9bae-4fdc-827c-25ec524dc751@6c48a",
+        "atlasUuid": "83e07b54-64eb-4d52-8014-c81577487226",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "1107.png",
+    "format": 2,
+    "uuid": "83e07b54-64eb-4d52-8014-c81577487226",
+    "textureUuid": "9ecbc98f-9bae-4fdc-827c-25ec524dc751@6c48a"
+  }
+}

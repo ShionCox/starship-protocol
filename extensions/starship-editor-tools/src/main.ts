@@ -1,22 +1,20 @@
 import {
   DEFAULT_PREFAB_DIRECTORY,
   CREW_CATALOG_CHANGE_MESSAGE,
-  CREW_CONFIG_DIRECTORY,
   HULL_CATALOG_CHANGE_MESSAGE,
-  HULL_CONFIG_DIRECTORY,
   PACKAGE_NAME,
   ROOM_CATALOG_CHANGE_MESSAGE,
-  ROOM_CONFIG_DIRECTORY,
+  PSS_INDEX_CHANGE_MESSAGE,
+  CSV_CONFIG_CHANGE_MESSAGE,
+  AUTHORING_BATCH_START_MESSAGE,
+  AUTHORING_BATCH_END_MESSAGE,
+  UI_PREFAB_DIRECTORY,
 } from './constants';
-import type { AssetMenuContext } from './contracts';
-import {
-  createRoomContent as createRoomContentWithAssetDb,
-  type RoomCreationRequest,
-} from './rooms/create-room-content';
-import { editorAssetDb } from './shared/editor-asset-db';
-import { editorSceneQuery } from './shared/editor-scene';
-import { validateOpenRoomPrefab } from './rooms/validate-open-room-prefab';
-import { discoverRoomPrefabs } from './rooms/discover-room-prefabs';
+import { ASSET_OPERATION_QUIET_MS, editorAssetDb, getCurrentAuthoringAsset, noteAuthoringAssetOperation, openEditorAsset, waitForAuthoringQuiet } from './shared/editor-asset-db';
+import type { AssetDbPort } from './shared/editor-asset-db';
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
+import { componentTypeMatches, editorSceneQuery, getSceneComponentUuid, saveAuthoringScene } from './shared/editor-scene';
 import {
   createRoomFromSelection,
   getRoomCatalog,
@@ -24,36 +22,54 @@ import {
 } from './rooms/room-module';
 import { initializeSceneSkeleton } from './scene/scene-skeleton';
 import type { SceneSkeletonKind } from './scene/scene-skeleton';
-import { createFoundationPrefabs, mountSharedUi, wireSceneFoundation } from './scene/foundation-prefab-authoring';
-import { bindRoomDefinitionToOpenPrefab } from './rooms/bind-room-prefab';
-import { resolveRoomPlacementTarget } from './rooms/room-scene-authoring';
 import {
-  updateRoomDefinition,
-  type RoomDefinitionEditRequest,
-} from './rooms/edit-room-definition';
+  configureP8VoxelDemoScene,
+  createFoundationPrefabs,
+  mountSharedUi,
+  openAuthoringSceneContext,
+  rebuildP8StarterShip as rebuildP8StarterShipInScene,
+  wireSceneFoundation,
+  UI_ROOT_PREFAB_URL,
+} from './scene/foundation-prefab-authoring';
+import { resolveRoomPlacementTarget } from './rooms/room-scene-authoring';
 import type { SceneNodeTree } from './shared/editor-scene';
 import {
   recognizeAuthoringSelection,
   type AuthoringSelection,
 } from './authoring-selection';
-import { discoverCrewPrefabs } from './crew/discover-crew-prefabs';
-import {
-  createCrewContent as createCrewContentWithAssetDb,
-  type CrewCreationRequest,
-} from './crew/create-crew-content';
-import { bindCrewDefinitionToOpenPrefab } from './crew/bind-crew-prefab';
+import { bindFirstPssCrewAppearances } from './crew/bind-crew-prefab';
 import { createCrewFromSelection, getCrewCatalog, setCrewCatalog } from './crew/crew-module';
-import { updateCrewDefinition, type CrewDefinitionEditRequest } from './crew/edit-crew-definition';
-import {
-  createHullDefinition as createHullDefinitionWithAssetDb,
-  discoverHullDefinitions,
-  getHullCatalog,
-  setHullCatalog,
-  updateHullDefinition as updateHullDefinitionWithAssetDb,
-} from './hulls/hull-catalog';
-import type { HullDefinitionInput } from './hulls/hull-definition';
+import { getHullCatalog, setHullCatalog } from './hulls/hull-catalog';
 import { createShipInstance as createShipInstanceInScene } from './hulls/ship-scene-authoring';
-import { describeRollback, rollbackCreatedAssets } from './shared/rollback-assets';
+import { bindFirstHullAppearances, FIRST_HULL_VISUALS } from './hulls/hull-appearance-authoring';
+import {
+  buildPssIndex as buildPssLibraryIndex,
+  searchPssAssets,
+} from './pss/pss-index';
+import type { PssLibraryIndex, PssSearchQuery } from './pss/pss-types';
+import type { PssManifest } from './pss/pss-types';
+import { createPssImportPort } from './pss/pss-import';
+import { bindFirstPssRoomAppearances } from './pss/pss-appearance-authoring';
+import { EDITOR_CSV_CONFIG_TABLES, loadCsvConfigBundle, saveCsvConfigBundle, validateEditorCsvConfigTables } from './csv/config-csv';
+import { loadEditorCatalogs } from './csv/editor-catalog';
+import {
+  loadRoomCsvDrafts,
+  saveOrCreateRoomCsvDraft,
+  toRoomPreviewDto,
+  updateRoomInstance as updateRoomInstanceFromCsv,
+  type RoomCsvDraft,
+  type RoomInstanceEditRequest,
+} from './rooms/room-csv-authoring';
+import { loadCrewCsvDrafts, loadHullCsvDrafts, saveOrCreateCrewCsvDraft, saveOrCreateHullCsvDraft, toCrewPreviewDto, toHullPreviewDto, type CrewCsvDraft, type HullCsvDraft } from './csv/domain-csv-authoring';
+
+export type AuthoringPageId = 'MAIN_MENU' | 'GALAXY_MAP' | 'SHIP' | 'BUILD' | 'CREW';
+const AUTHORING_PAGE_PREFABS: Readonly<Record<AuthoringPageId, string>> = {
+  MAIN_MENU: `${UI_PREFAB_DIRECTORY}/MainMenuPage.prefab`, GALAXY_MAP: `${UI_PREFAB_DIRECTORY}/GalaxyMapPage.prefab`,
+  SHIP: `${UI_PREFAB_DIRECTORY}/ShipMainPage.prefab`, BUILD: `${UI_PREFAB_DIRECTORY}/BuildPage.prefab`, CREW: `${UI_PREFAB_DIRECTORY}/CrewPage.prefab`,
+};
+const AUTHORING_PAGE_ROUTER_METHOD: Readonly<Record<AuthoringPageId, string>> = {
+  MAIN_MENU: 'showMainMenu', GALAXY_MAP: 'showGalaxyMap', SHIP: 'showShip', BUILD: 'showBuild', CREW: 'showCrew',
+};
 
 export interface AuthoringState {
   readonly selection: AuthoringSelection;
@@ -77,138 +93,495 @@ let catalogFingerprint = '';
 let crewCatalogFingerprint = '';
 let hullCatalogFingerprint = '';
 let catalogRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let authoringRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingAuthoringAssetUuid: string | undefined;
 let assetChangeListener: ((...args: unknown[]) => void) | undefined;
 let extensionLoaded = false;
+let authoringBatchDepth = 0;
+let assetRefreshQueuedDuringBatch = false;
+let pssIndex: PssLibraryIndex | undefined;
+let lastAuthoringRefreshFingerprint = '';
 
 export const methods = {
-  openRoomCreate(context: AssetMenuContext) {
-    return Editor.Panel.open(PACKAGE_NAME, context);
-  },
   openAuthoringPanel() {
     return Editor.Panel.open(`${PACKAGE_NAME}.authoring`);
   },
-  createRoomContent(request: RoomCreationRequest) {
-    return createRoomContentWithAssetDb(request, editorAssetDb).then(async (result) => {
-      if (!result.ok) return result;
-      let failureMessage: string | null = null;
-      try {
-        const configUuid = await editorAssetDb.queryUuid(result.configUrl);
-        if (configUuid === '') {
-          failureMessage = `创建后找不到房间定义资源：${result.configUrl}`;
-        } else {
-          await Editor.Message.request('asset-db', 'open-asset', result.prefabUrl);
-          const binding = await bindRoomDefinitionToOpenPrefab(editorSceneQuery, configUuid, request.id);
-          if (binding.ok) {
-            const refreshed = await refreshRoomCatalogNow();
-            const warning = refreshed.warnings.length > 0
-              ? `（列表刷新有 ${refreshed.warnings.length} 条警告）`
-              : '';
-            return { ...result, message: `${result.message}${binding.message}${warning}` };
-          }
-          failureMessage = binding.message;
-        }
-      } catch (error) {
-        failureMessage = error instanceof Error ? error.message : String(error);
-      }
-      const rollbackErrors = await rollbackCreatedAssets(editorAssetDb, [result.prefabUrl, result.configUrl]);
-      return {
-        ok: false as const,
-        message: `${failureMessage ?? '房间定义绑定失败'}；${describeRollback(rollbackErrors)}`,
-      };
-    });
+  async openCreatedPrefab(prefabUrl: string) {
+    await openEditorAsset(prefabUrl);
+    await previewMappedPrefab(prefabUrl);
   },
-  createCrewContent(request: CrewCreationRequest) {
-    return createCrewContentWithAssetDb(request, editorAssetDb).then(async (result) => {
-      if (!result.ok) return result;
-      let failureMessage: string | null = null;
-      try {
-        const configUuid = await editorAssetDb.queryUuid(result.configUrl);
-        if (configUuid === '') failureMessage = `创建后找不到船员定义资源：${result.configUrl}`;
-        else {
-          await Editor.Message.request('asset-db', 'open-asset', result.prefabUrl);
-          const binding = await bindCrewDefinitionToOpenPrefab(
-            editorSceneQuery,
-            configUuid,
-            request.id,
-            request.role as 'ENGINEER' | 'GUNNER',
-          );
-          if (binding.ok) {
-            await refreshCrewCatalogNow();
-            return { ...result, message: `${result.message}${binding.message}` };
-          }
-          failureMessage = binding.message;
-        }
-      } catch (cause) {
-        failureMessage = cause instanceof Error ? cause.message : String(cause);
-      }
-      const rollbackErrors = await rollbackCreatedAssets(editorAssetDb, [result.prefabUrl, result.configUrl]);
-      return { ok: false as const, message: `${failureMessage ?? '船员定义绑定失败'}；${describeRollback(rollbackErrors)}` };
-    });
+  async previewPage(page: AuthoringPageId) {
+    const prefabUrl = AUTHORING_PAGE_PREFABS[page];
+    if (prefabUrl === undefined) return { ok: false as const, message: `未知页面：${page}` };
+    try {
+      await openEditorAsset(prefabUrl);
+      await openAuthoringSceneContext(editorSceneQuery, 'MAIN');
+      const wired = await wireSceneFoundation(editorAssetDb, editorSceneQuery, 'MAIN');
+      if (!wired.ok) return wired;
+      await openEditorAsset(UI_ROOT_PREFAB_URL);
+      const classes = editorSceneQuery.queryComponents === undefined ? [] : await editorSceneQuery.queryComponents();
+      const tree = await editorSceneQuery.queryNodeTree();
+      const router = flattenTree(tree).flatMap((node) => (node.components ?? []).map((component) => ({ component })))
+        .find(({ component }) => componentTypeMatches(component, 'MainPageRouter', classes));
+      const uuid = router === undefined ? undefined : getSceneComponentUuid(router.component);
+      if (uuid === undefined) return { ok: false as const, message: 'UIRoot 缺少 MainPageRouter' };
+      await editorSceneQuery.executeComponentMethod(uuid, AUTHORING_PAGE_ROUTER_METHOD[page], []);
+      return { ok: true as const, message: `已在隔离 UIRoot Prefab 中预览${page}页面；重新连接场景引用会恢复主菜单默认状态` };
+    } catch (cause) { return { ok: false as const, message: `页面预览失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
   },
-  openCreatedPrefab(prefabUrl: string) {
-    return Editor.Message.request('asset-db', 'open-asset', prefabUrl);
-  },
-  validateOpenRoomPrefab() {
-    return validateOpenRoomPrefab(editorSceneQuery);
+  async openPagePrefab(page: AuthoringPageId) {
+    const prefabUrl = AUTHORING_PAGE_PREFABS[page];
+    if (prefabUrl === undefined) return { ok: false as const, message: `未知页面：${page}` };
+    try { await openEditorAsset(prefabUrl); return { ok: true as const, message: `已打开${page}页面 Prefab` }; }
+    catch (cause) { return { ok: false as const, message: `打开页面 Prefab 失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
   },
   async refreshAuthoringState() {
-    await Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow(), refreshHullCatalogNow()]);
+    await refreshEditorCatalogsNow();
     return await getAuthoringState();
   },
   async initializeSceneSkeleton(kind: SceneSkeletonKind) {
     const result = await initializeSceneSkeleton(editorSceneQuery, kind);
-    if (result.ok) await Editor.Message.request('scene', 'save-scene');
+    if (result.ok) await saveAuthoringScene();
     return result;
   },
-  async createFoundationPrefabs() {
-    return await createFoundationPrefabs(editorAssetDb, editorSceneQuery);
+  async createFoundationPrefabs(kind: SceneSkeletonKind) {
+    beginAuthoringBatch();
+    try {
+      return await createFoundationPrefabs(editorAssetDb, editorSceneQuery, kind);
+    } finally {
+      await endAuthoringBatch();
+    }
   },
   async mountSharedUi(kind: SceneSkeletonKind) {
     return await mountSharedUi(editorAssetDb, editorSceneQuery, kind);
   },
   async wireSceneFoundation(kind: SceneSkeletonKind) {
-    return await wireSceneFoundation(editorSceneQuery, kind);
+    try {
+      await openAuthoringSceneContext(editorSceneQuery, kind);
+      return await wireSceneFoundation(editorAssetDb, editorSceneQuery, kind);
+    } catch (cause) {
+      return { ok: false, message: cause instanceof Error ? cause.message : String(cause) };
+    }
+  },
+  async configureP8VoxelDemoScene() {
+    return await configureP8VoxelDemoScene(editorAssetDb, editorSceneQuery);
+  },
+  /**
+   * 通过同一批公开 Asset DB/Scene API 全新重建 P8.3 资源和标准新手船。
+   * 视觉绑定由本入口注入，foundation 模块不反向依赖 PSS 领域模块。
+   */
+  async rebuildP8StarterShip() {
+    beginAuthoringBatch();
+    try {
+      return await rebuildP8StarterShipInScene(editorAssetDb, editorSceneQuery, {
+        bindRoomAppearances: async () => {
+          const result = await bindFirstPssRoomAppearances(
+            editorAssetDb,
+            editorSceneQuery,
+            openEditorAsset,
+            async () => { await saveAuthoringScene(); },
+          );
+          return result;
+        },
+        bindCrewAppearances: async () => {
+          const result = await bindFirstPssCrewAppearances(
+            editorAssetDb,
+            editorSceneQuery,
+            openEditorAsset,
+            async () => { await saveAuthoringScene(); },
+          );
+          return result;
+        },
+        bindHullAppearances: async () => await bindStarterHullAppearancesForRebuild(),
+      });
+    } catch (cause) {
+      return { ok: false, message: `P8.3 全新重建失败：${cause instanceof Error ? cause.message : String(cause)}` };
+    } finally {
+      await endAuthoringBatch();
+    }
   },
   async getAuthoringState() {
     return await getAuthoringState();
   },
+  async getCsvConfigTables() {
+    return await loadCsvConfigBundle(editorAssetDb);
+  },
+  /** 使用 Creator 公开原生文件选择器一次导入完整编辑器 CSV bundle。 */
+  async importCsvConfigBundle() {
+    const dialog = (Editor as unknown as { Dialog?: { openFile?: (options: Record<string, unknown>) => Promise<unknown> } }).Dialog;
+    if (dialog?.openFile === undefined) return { ok: false as const, message: '当前 Creator 不提供公开 CSV 文件选择器' };
+    const selected = await dialog.openFile({
+      title: '选择完整 P8.3 CSV 配置包',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    const paths = Array.isArray(selected)
+      ? selected.filter((value): value is string => typeof value === 'string')
+      : (typeof selected === 'object' && selected !== null && Array.isArray((selected as { filePaths?: unknown }).filePaths)
+        ? ((selected as { filePaths: unknown[] }).filePaths.filter((value): value is string => typeof value === 'string'))
+        : []);
+    if (paths.length === 0) return { ok: false as const, message: '已取消 CSV 导入' };
+    const names = new Set(paths.map((file) => basename(file)));
+    const expected = new Set<string>(EDITOR_CSV_CONFIG_TABLES);
+    if (paths.length !== expected.size || names.size !== expected.size || [...expected].some((name) => !names.has(name))) {
+      return { ok: false as const, message: `必须一次选择完整 ${expected.size} 张 CSV（${[...expected].join('、')}）` };
+    }
+    try {
+      const tables = Object.fromEntries(await Promise.all(paths.map(async (file) => [basename(file), await readFile(file, 'utf8')] as const))) as Record<typeof EDITOR_CSV_CONFIG_TABLES[number], string>;
+      validateEditorCsvConfigTables(tables);
+      const result = await saveCsvConfigBundle(editorAssetDb, tables);
+      if (result.ok) getBroadcastMessagePort()?.broadcast?.(CSV_CONFIG_CHANGE_MESSAGE);
+      return result;
+    } catch (cause) {
+      return { ok: false as const, message: cause instanceof Error ? cause.message : String(cause) };
+    }
+  },
+  /** 读取 rooms.csv 与 connector-ports.csv 的白名单草稿，不读取旧 JSON。 */
+  async getRoomCsvDrafts() {
+    return await loadRoomCsvDrafts(editorAssetDb);
+  },
+  /** 新建只产生内存草稿；真正写入由领域页保存按钮完成。 */
+  async createRoomCsvDraft() {
+    const loaded = await loadRoomCsvDrafts(editorAssetDb);
+    if (!loaded.ok || loaded.drafts === undefined || loaded.drafts.length === 0) return { ok: false as const, message: loaded.message || 'rooms.csv 没有可复制的基础行' };
+    const ids = new Set(loaded.drafts.map((draft) => draft.id));
+    const id = nextDraftId('room', ids);
+    const base = loaded.drafts[0];
+    return { ok: true as const, message: `已创建房间草稿 ${id}，点击保存后追加到 rooms.csv`, draft: { ...base, id, displayName: '新房间', category: 'SPECIAL', verticalConnectorKind: 'NONE', visualId: base.visualId, connectorPorts: [] } };
+  },
+  async createCrewCsvDraft() {
+    const loaded = await loadCrewCsvDrafts(editorAssetDb);
+    if (!loaded.ok || loaded.drafts === undefined || loaded.drafts.length === 0) return { ok: false as const, message: loaded.message || 'crews.csv 没有可复制的基础行' };
+    const ids = new Set(loaded.drafts.map((draft) => draft.id));
+    const id = nextDraftId('crew', ids);
+    const base = loaded.drafts[0];
+    return { ok: true as const, message: `已创建船员草稿 ${id}，点击保存后追加到 crews.csv`, draft: { ...base, id, displayName: '新船员' } };
+  },
+  async createHullCsvDraft() {
+    const loaded = await loadHullCsvDrafts(editorAssetDb);
+    if (!loaded.ok || loaded.drafts === undefined || loaded.drafts.length === 0) return { ok: false as const, message: loaded.message || 'hulls.csv 没有可复制的基础行' };
+    const ids = new Set(loaded.drafts.map((draft) => draft.id));
+    const id = nextDraftId('hull', ids);
+    const base = loaded.drafts[0];
+    return { ok: true as const, message: `已创建船体草稿 ${id}，点击保存后追加到 hulls.csv`, draft: { ...base, id, displayName: '新船体' } };
+  },
+  async saveCrewCsvDraft(request: { readonly draft: CrewCsvDraft }) {
+    const result = await saveOrCreateCrewCsvDraft(editorAssetDb, request.draft);
+    if (result.ok) {
+      getBroadcastMessagePort()?.broadcast?.(CSV_CONFIG_CHANGE_MESSAGE);
+      await refreshEditorCatalogsNow();
+    }
+    return result;
+  },
+  async previewCrewDefinition(draft: CrewCsvDraft) {
+    const checked = toCrewPreviewDto(draft);
+    if (typeof checked === 'string') return { ok: false as const, message: checked };
+    try { return { ok: true as const, message: describeAuthoringRefresh(await refreshCurrentAuthoringContext('crew', draft.id, checked)), dto: checked }; }
+    catch (cause) { return { ok: false as const, message: `船员预览刷新失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
+  },
+  async saveHullCsvDraft(request: { readonly draft: HullCsvDraft }) {
+    const result = await saveOrCreateHullCsvDraft(editorAssetDb, request.draft);
+    if (result.ok) {
+      getBroadcastMessagePort()?.broadcast?.(CSV_CONFIG_CHANGE_MESSAGE);
+      await refreshEditorCatalogsNow();
+    }
+    return result;
+  },
+  async previewHullDefinition(draft: HullCsvDraft) {
+    const checked = toHullPreviewDto(draft);
+    if (typeof checked === 'string') return { ok: false as const, message: checked };
+    try { return { ok: true as const, message: describeAuthoringRefresh(await refreshCurrentAuthoringContext('hull', draft.id, checked)), dto: checked }; }
+    catch (cause) { return { ok: false as const, message: `船体预览刷新失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
+  },
+  /** 房间表单输入只在编辑器内存中预览，不写入 CSV 或场景序列化数据。 */
+  async previewRoomDefinition(draft: RoomCsvDraft) {
+    const checked = toRoomPreviewDto(draft);
+    if (checked.ok === false) return checked;
+    try {
+      const summary = await refreshCurrentAuthoringContext('room', checked.dto.id, checked.dto);
+      return { ok: true as const, message: describeAuthoringRefresh(summary), dto: checked.dto };
+    } catch (cause) {
+      return { ok: false as const, message: `房间预览刷新失败：${cause instanceof Error ? cause.message : String(cause)}` };
+    }
+  },
+  /** 清理当前打开 Scene/Prefab 的所有创作预览，不保存 Scene，也不产生 Undo。 */
+  async cancelAuthoringPreview() {
+    return await clearCurrentAuthoringPreviews();
+  },
+  /** 保存房间 CSV 行并在当前打开上下文刷新预览。 */
+  async saveRoomCsvDraft(request: { readonly draft: RoomCsvDraft }) {
+    const result = await saveOrCreateRoomCsvDraft(editorAssetDb, request);
+    if (!result.ok) return result;
+    let message = result.message;
+    try {
+      const summary = await refreshCurrentAuthoringContext('room', result.dto.id, result.dto);
+      message = `${message}；${describeAuthoringRefresh(summary)}`;
+    } catch (cause) {
+      message = `${message}；当前房间预览刷新失败：${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+    getBroadcastMessagePort()?.broadcast?.(CSV_CONFIG_CHANGE_MESSAGE);
+    return { ...result, message };
+  },
+  /** 房间实例只允许编辑逻辑格 x/y 与 initialHp，并通过一次 Scene recording 提交。 */
+  async updateRoomInstance(request: RoomInstanceEditRequest) {
+    return await updateRoomInstanceFromCsv(editorSceneQuery, request);
+  },
   async createRoomInstance(entry: Parameters<typeof createRoomFromSelection>[0]) {
     return await createRoomFromSelection(entry, { nodeUuid: getSelectedNodeUuid() });
   },
-  async createCrewInstance(entry: Parameters<typeof createCrewFromSelection>[0]) {
-    return await createCrewFromSelection(entry, { nodeUuid: getSelectedNodeUuid() });
+  async createCrewInstance(input: Parameters<typeof createCrewFromSelection>[0] | { readonly entry: Parameters<typeof createCrewFromSelection>[0]; readonly nameMode?: string; readonly callSign?: string }) {
+    const request = 'entry' in input ? input : { entry: input };
+    return await createCrewFromSelection(request.entry, { nodeUuid: getSelectedNodeUuid() }, request);
   },
-  async updateRoomDefinition(request: RoomDefinitionEditRequest) {
-    const result = await updateRoomDefinition(request, editorAssetDb);
-    if (result.ok) await refreshRoomCatalogNow();
+  /** PSS 只读参考库索引；缺失 sourceRoot 时保留中文 warning。 */
+  async buildPssIndex(sourceRoot?: string) {
+    const result = await buildPssLibraryIndex(sourceRoot);
+    pssIndex = result;
+    getBroadcastMessagePort()?.broadcast?.(PSS_INDEX_CHANGE_MESSAGE);
     return result;
   },
-  async updateCrewDefinition(request: CrewDefinitionEditRequest) {
-    const result = await updateCrewDefinition(request, editorAssetDb);
-    if (result.ok) await refreshCrewCatalogNow();
-    return result;
+  async searchPssAssets(query: PssSearchQuery = {}) {
+    if (pssIndex === undefined) pssIndex = await buildPssLibraryIndex();
+    return searchPssAssets(pssIndex, query);
   },
-  async createHullDefinition(request: HullDefinitionInput) {
-    const result = await createHullDefinitionWithAssetDb(request, editorAssetDb);
-    if (result.ok) await refreshHullCatalogNow();
-    return result;
+  async bindFirstPssRoomAppearances(kind: SceneSkeletonKind = 'MAIN') {
+    let result: Awaited<ReturnType<typeof bindFirstPssRoomAppearances>> | undefined;
+    beginAuthoringBatch();
+    try {
+      result = await bindFirstPssRoomAppearances(editorAssetDb, editorSceneQuery, openEditorAsset, async () => {
+        await saveAuthoringScene();
+      });
+    } finally {
+      try { await openAuthoringSceneContext(editorSceneQuery, kind); }
+      finally { await endAuthoringBatch(); }
+    }
+    return result as Awaited<ReturnType<typeof bindFirstPssRoomAppearances>>;
   },
-  async updateHullDefinition(request: HullDefinitionInput & { readonly configUrl: string }) {
-    const result = await updateHullDefinitionWithAssetDb(request, editorAssetDb);
-    if (result.ok) await refreshHullCatalogNow();
-    return result;
+  async bindFirstPssCrewAppearances(kind: SceneSkeletonKind = 'MAIN') {
+    let result: Awaited<ReturnType<typeof bindFirstPssCrewAppearances>> | undefined;
+    beginAuthoringBatch();
+    try {
+      result = await bindFirstPssCrewAppearances(editorAssetDb, editorSceneQuery, openEditorAsset, async () => {
+        await saveAuthoringScene();
+      });
+    } catch (cause) {
+      result = { ok: false, message: cause instanceof Error ? cause.message : String(cause), bound: [] };
+    } finally {
+      // 批量打开 Prefab 会改变 Creator 当前编辑上下文；无论成功或失败，
+      // 都回到面板选择的 Scene，避免用户误以为场景引用丢失。
+      try {
+        await openAuthoringSceneContext(editorSceneQuery, kind);
+      } catch (restoreCause) {
+        if (result !== undefined) {
+          result = { ...result, ok: false, message: `${result.message}；恢复${kind}场景失败：${restoreCause instanceof Error ? restoreCause.message : String(restoreCause)}` };
+        } else {
+          throw restoreCause;
+        }
+      } finally { await endAuthoringBatch(); }
+    }
+    return result as Awaited<ReturnType<typeof bindFirstPssCrewAppearances>>;
+  },
+  /** 用户确认 PSS 候选后，仅导入两张白名单船图并持久升级共享 ShipView Prefab。 */
+  async importAndBindFirstPssHullAppearances(kind: SceneSkeletonKind = 'MAIN') {
+    beginAuthoringBatch();
+    try {
+      const manifestInfo = await editorAssetDb.queryInfo('db://assets/textures/pss/manifest.json');
+      if (manifestInfo?.file === undefined) return { ok: false as const, message: '无法读取项目 PSS manifest' };
+      const manifest = JSON.parse(await editorAssetDb.readFile('db://assets/textures/pss/manifest.json')) as PssManifest;
+      const selected = manifest.entries.filter((entry) => FIRST_HULL_VISUALS.some((item) => item.visualId === entry.visualId));
+      if (selected.length !== FIRST_HULL_VISUALS.length) return { ok: false as const, message: 'PSS manifest 缺少 4324/261 船体白名单条目' };
+      const targetRoot = Editor.Project.path;
+      const imported = await createPssImportPort({ sourceRoot: manifest.sourceRoot, targetRoot }).importManifest({ ...manifest, entries: selected });
+      if (!imported.every((entry) => entry.ok)) return { ok: false as const, message: imported.map((entry) => `${entry.assetId}：${entry.message}`).join('；') };
+      await Editor.Message.request('asset-db', 'refresh-asset', 'db://assets/textures/pss/ship');
+      for (const item of FIRST_HULL_VISUALS) {
+        const url = `db://${item.target}`;
+        await waitForImportedTexture2D(editorAssetDb, url);
+      }
+      await openEditorAsset('db://assets/prefabs/ShipView.prefab');
+      const result = await bindFirstHullAppearances(editorAssetDb, editorSceneQuery);
+      if (result.ok) await saveAuthoringScene();
+      return result;
+    } catch (cause) {
+      return { ok: false as const, message: cause instanceof Error ? cause.message : String(cause), bound: [] };
+    } finally {
+      try { await openAuthoringSceneContext(editorSceneQuery, kind); }
+      finally { await endAuthoringBatch(); }
+    }
   },
   async createShipInstance(entry: Parameters<typeof createShipInstanceInScene>[3]) {
     return await createShipInstanceInScene(editorAssetDb, editorSceneQuery, { nodeUuid: getSelectedNodeUuid() }, entry);
   },
 };
 
+/** 打开独立 Prefab 后只注入内存 DTO；不会把九张 CSV 或预览 DTO 写回资源。 */
+async function previewMappedPrefab(prefabUrl: string): Promise<void> {
+  if (getRoomCatalog().length === 0 && getCrewCatalog().length === 0 && getHullCatalog().length === 0) {
+    await refreshEditorCatalogsNow();
+  }
+  const roomEntries = getRoomCatalog().filter((entry) => entry.prefabUrl === prefabUrl);
+  if (roomEntries.length > 0) {
+    const loaded = await loadRoomCsvDrafts(editorAssetDb);
+    if (!loaded.ok || loaded.drafts === undefined) throw new Error(loaded.message);
+    for (const entry of roomEntries) {
+      const draft = loaded.drafts.find((item) => item.id === entry.id);
+      if (draft === undefined) throw new Error(`权威 CSV 中不存在房间定义：${entry.id}`);
+      const checked = toRoomPreviewDto(draft);
+      if (!checked.ok) throw new Error(checked.message);
+      await refreshCurrentAuthoringContext('room', entry.id, checked.dto);
+    }
+    return;
+  }
+  const crewEntries = getCrewCatalog().filter((entry) => entry.prefabUrl === prefabUrl);
+  if (crewEntries.length > 0) {
+    const loaded = await loadCrewCsvDrafts(editorAssetDb);
+    if (!loaded.ok || loaded.drafts === undefined) throw new Error(loaded.message);
+    for (const entry of crewEntries) {
+      const draft = loaded.drafts.find((item) => item.id === entry.id);
+      if (draft === undefined) throw new Error(`权威 CSV 中不存在船员定义：${entry.id}`);
+      const checked = toCrewPreviewDto(draft);
+      if (typeof checked === 'string') throw new Error(checked);
+      await refreshCurrentAuthoringContext('crew', entry.id, checked);
+    }
+    return;
+  }
+  const hullEntries = getHullCatalog().filter((entry) => entry.prefabUrl === prefabUrl);
+  if (hullEntries.length === 0) return;
+  const loaded = await loadHullCsvDrafts(editorAssetDb);
+  if (!loaded.ok || loaded.drafts === undefined) throw new Error(loaded.message);
+  // ShipView 是共享模板；依次提交 DTO，只有当前持久 hullDefinitionId 匹配的项会生效。
+  for (const entry of hullEntries) {
+    const draft = loaded.drafts.find((item) => item.id === entry.id);
+    if (draft === undefined) throw new Error(`权威 CSV 中不存在船体定义：${entry.id}`);
+    const checked = toHullPreviewDto(draft);
+    if (typeof checked === 'string') throw new Error(checked);
+    await refreshCurrentAuthoringContext('hull', entry.id, checked);
+  }
+}
+
 export function load(): void {
   extensionLoaded = true;
   registerAssetChangeListener();
-  void Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow(), refreshHullCatalogNow()]).catch((cause: unknown) => {
+  void Promise.all([
+    refreshEditorCatalogsNow(),
+    buildPssLibraryIndex().then((result) => { pssIndex = result; }),
+  ]).catch((cause: unknown) => {
     console.warn(`[AUTHORING] 创作资源列表刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
   });
+}
+
+type AuthoringPreviewKind = 'room' | 'crew' | 'hull';
+export interface AuthoringPreviewRefreshSummary {
+  readonly matched: number;
+  readonly moved: number;
+  readonly invalid: readonly string[];
+}
+
+/**
+ * 只刷新 Creator 当前打开的 Scene/Prefab。
+ *
+ * CSV 保存后，编辑器中的组件仍可能持有旧的预览缓存。这里通过公开 Scene API 将
+ * 纯 DTO 传给当前上下文的 View，
+ * 不扫描关闭的场景，也不自动保存 Scene，避免覆盖设计人员其他未提交修改。
+ */
+export async function refreshCurrentAuthoringContext(
+  kind: AuthoringPreviewKind,
+  definitionId: string,
+  document: unknown,
+): Promise<AuthoringPreviewRefreshSummary> {
+  const before = await editorSceneQuery.queryNodeTree();
+  const fingerprint = JSON.stringify({ root: before.uuid ?? '', kind, definitionId, document });
+  if (fingerprint === lastAuthoringRefreshFingerprint) return { matched: 0, moved: 0, invalid: [] };
+  const classes = editorSceneQuery.queryComponents === undefined ? [] : await editorSceneQuery.queryComponents();
+  const nodes = flattenTree(before);
+  const componentType = kind === 'room' ? 'RoomView' : kind === 'crew' ? 'CrewView' : 'ShipView';
+  const applyMethod = kind === 'room'
+    ? 'applyAuthoringDefinitionPreview'
+    : kind === 'crew' ? 'applyAuthoringDefinitionPreview' : 'applyAuthoringHullPreview';
+  let matched = 0;
+  const invalid: string[] = [];
+
+  for (const node of nodes) {
+    for (const component of node.components ?? []) {
+      if (!componentTypeMatches(component, componentType, classes)) continue;
+      const uuid = getSceneComponentUuid(component);
+      if (uuid === undefined) continue;
+      const state = await editorSceneQuery.executeComponentMethod(uuid, 'getAuthoringInspectorState', []) as Record<string, unknown> | null;
+      const currentId = kind === 'room'
+        ? state?.roomDefinitionId
+        : kind === 'crew' ? state?.crewDefinitionId : state?.hullDefinitionId;
+      if (currentId !== definitionId) continue;
+      matched += 1;
+      const applied = await editorSceneQuery.executeComponentMethod(uuid, applyMethod, [document]);
+      if (applied !== true) {
+        invalid.push(String(state?.roomInstanceId ?? state?.crewInstanceId ?? state?.shipId ?? node.name ?? uuid));
+      }
+    }
+  }
+
+  // 房间或船体尺寸/Mask变化后，重新计算当前上下文中的房间与船员表现位置。
+  // 这里的布局刷新是伴随校验，不应把其他既有非法实例误报成“本次资源保存失败”；
+  // 目标定义本身的 applyAuthoring* 返回 false 才属于本次保存的刷新失败。
+  if (kind === 'room' || kind === 'hull') {
+    for (const node of nodes) {
+      for (const component of node.components ?? []) {
+        const uuid = getSceneComponentUuid(component);
+        if (uuid === undefined) continue;
+        if (!componentTypeMatches(component, 'ShipView', classes)
+          && !componentTypeMatches(component, 'RoomView', classes)
+          && !componentTypeMatches(component, 'CrewView', classes)) continue;
+        try {
+          await editorSceneQuery.executeComponentMethod(uuid, 'refreshAuthoringLayoutPreview', []);
+        } catch (cause) {
+          // 布局伴随刷新失败不能回滚已经保存的 JSON；目标定义的 apply 方法仍会
+          // 把自身错误返回给保存结果，其他旧实例只保留编辑器里的现状并等待重试。
+          console.warn(`[AUTHORING] 布局伴随刷新失败（${node.name ?? uuid}）：${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+      }
+    }
+  }
+
+  const after = await editorSceneQuery.queryNodeTree();
+  const moved = countPositionChanges(before, after);
+  // 定义草稿预览只改变内存中的组件表现，不创建 Scene Undo；实例位置修改
+  // 通过 updateRoomInstance 的一次 recording 单独提交。
+  if (invalid.length > 0) {
+    throw new Error(`已刷新 ${matched} 个实例，但以下实例需要调整：${[...new Set(invalid)].join('、')}`);
+  }
+  lastAuthoringRefreshFingerprint = fingerprint;
+  return { matched, moved, invalid };
+}
+
+/**
+ * 清理当前打开的 Scene/Prefab 中所有创作预览覆盖。
+ * 只调用 View 的公开清理方法，不保存 Scene、不建立 Undo，也不扫描关闭的资源。
+ */
+export async function clearCurrentAuthoringPreviews(): Promise<{ readonly ok: boolean; readonly message: string; readonly cleared: number }> {
+  const tree = await editorSceneQuery.queryNodeTree();
+  const classes = editorSceneQuery.queryComponents === undefined ? [] : await editorSceneQuery.queryComponents();
+  const methodsByType: Readonly<Record<string, string>> = {
+    RoomView: 'clearAuthoringDefinitionPreview',
+    CrewView: 'clearAuthoringDefinitionPreview',
+    ShipView: 'clearAuthoringDefinitionPreview',
+  };
+  let cleared = 0;
+  for (const node of flattenTree(tree)) {
+    for (const component of node.components ?? []) {
+      const type = Object.keys(methodsByType).find((candidate) => componentTypeMatches(component, candidate, classes));
+      if (type === undefined) continue;
+      const uuid = getSceneComponentUuid(component);
+      if (uuid === undefined) continue;
+      await editorSceneQuery.executeComponentMethod(uuid, methodsByType[type], []);
+      cleared += 1;
+    }
+  }
+  lastAuthoringRefreshFingerprint = '';
+  return { ok: true, message: cleared === 0 ? '当前上下文没有创作预览覆盖' : `已清理当前上下文 ${cleared} 个创作预览`, cleared };
+}
+
+function describeAuthoringRefresh(summary: AuthoringPreviewRefreshSummary): string {
+  const invalid = summary.invalid.length > 0 ? `，需调整 ${[...new Set(summary.invalid)].join('、')}` : '';
+  return `已刷新 ${summary.matched} 个实例，位置调整 ${summary.moved} 个${invalid}`;
 }
 export function unload(): void {
   extensionLoaded = false;
@@ -221,42 +594,58 @@ export function unload(): void {
     clearTimeout(catalogRefreshTimer);
     catalogRefreshTimer = undefined;
   }
+  if (authoringRefreshTimer !== undefined) {
+    clearTimeout(authoringRefreshTimer);
+    authoringRefreshTimer = undefined;
+  }
+  pendingAuthoringAssetUuid = undefined;
+  authoringBatchDepth = 0;
+  assetRefreshQueuedDuringBatch = false;
+  lastAuthoringRefreshFingerprint = '';
 }
 
-async function refreshRoomCatalogNow() {
-  const result = await discoverRoomPrefabs(editorAssetDb);
-  setRoomCatalog(result.entries);
-  catalogWarnings = result.warnings;
-  const nextFingerprint = JSON.stringify({ entries: result.entries, warnings: result.warnings });
-  const changed = nextFingerprint !== catalogFingerprint;
-  catalogFingerprint = nextFingerprint;
-  for (const warning of result.warnings) console.warn(`[ROOM] ${warning}`);
-  if (changed) getBroadcastMessagePort()?.broadcast?.(ROOM_CATALOG_CHANGE_MESSAGE);
-  return result;
+interface EditorCatalogRefreshResult {
+  readonly entries: {
+    readonly rooms: ReturnType<typeof getRoomCatalog>;
+    readonly crews: ReturnType<typeof getCrewCatalog>;
+    readonly hulls: ReturnType<typeof getHullCatalog>;
+  };
+  readonly warnings: readonly string[];
 }
 
-async function refreshCrewCatalogNow() {
-  const result = await discoverCrewPrefabs(editorAssetDb);
-  setCrewCatalog(result.entries);
-  crewCatalogWarnings = result.warnings;
-  const nextFingerprint = JSON.stringify({ entries: result.entries, warnings: result.warnings });
-  const changed = nextFingerprint !== crewCatalogFingerprint;
-  crewCatalogFingerprint = nextFingerprint;
-  for (const warning of result.warnings) console.warn(`[CREW] ${warning}`);
-  if (changed) getBroadcastMessagePort()?.broadcast?.(CREW_CATALOG_CHANGE_MESSAGE);
-  return result;
-}
-
-async function refreshHullCatalogNow() {
-  const result = await discoverHullDefinitions(editorAssetDb);
-  setHullCatalog(result.entries);
-  hullCatalogWarnings = result.warnings;
-  const nextFingerprint = JSON.stringify(result);
-  const changed = nextFingerprint !== hullCatalogFingerprint;
-  hullCatalogFingerprint = nextFingerprint;
-  for (const warning of result.warnings) console.warn(`[HULL] ${warning}`);
-  if (changed) getBroadcastMessagePort()?.broadcast?.(HULL_CATALOG_CHANGE_MESSAGE);
-  return result;
+/** 目录只从九张运行时 CSV 与 editor-prefabs.csv 生成，避免关闭资源被 JSON 扫描重新带回。 */
+async function refreshEditorCatalogsNow(): Promise<EditorCatalogRefreshResult> {
+  try {
+    const catalogs = await loadEditorCatalogs(editorAssetDb);
+    const warnings: string[] = [];
+    setRoomCatalog(catalogs.rooms);
+    setCrewCatalog(catalogs.crews);
+    setHullCatalog(catalogs.hulls);
+    catalogWarnings = crewCatalogWarnings = hullCatalogWarnings = warnings;
+    const roomFingerprint = JSON.stringify(catalogs.rooms);
+    const crewFingerprint = JSON.stringify(catalogs.crews);
+    const hullFingerprint = JSON.stringify(catalogs.hulls);
+    const roomChanged = roomFingerprint !== catalogFingerprint;
+    const crewChanged = crewFingerprint !== crewCatalogFingerprint;
+    const hullChanged = hullFingerprint !== hullCatalogFingerprint;
+    catalogFingerprint = roomFingerprint;
+    crewCatalogFingerprint = crewFingerprint;
+    hullCatalogFingerprint = hullFingerprint;
+    if (roomChanged) getBroadcastMessagePort()?.broadcast?.(ROOM_CATALOG_CHANGE_MESSAGE);
+    if (crewChanged) getBroadcastMessagePort()?.broadcast?.(CREW_CATALOG_CHANGE_MESSAGE);
+    if (hullChanged) getBroadcastMessagePort()?.broadcast?.(HULL_CATALOG_CHANGE_MESSAGE);
+    return { entries: {
+      rooms: catalogs.rooms,
+      crews: catalogs.crews,
+      hulls: catalogs.hulls,
+    }, warnings };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const warnings = [`CSV 目录加载失败：${message}`];
+    catalogWarnings = crewCatalogWarnings = hullCatalogWarnings = warnings;
+    console.warn(`[AUTHORING] ${warnings[0]}`);
+    return { entries: { rooms: getRoomCatalog(), crews: getCrewCatalog(), hulls: getHullCatalog() }, warnings };
+  }
 }
 
 async function getAuthoringState(): Promise<AuthoringState> {
@@ -306,6 +695,54 @@ async function getAuthoringState(): Promise<AuthoringState> {
   }
 }
 
+/** P8.3 编排专用 HullAppearance 绑定；调用方已处于 authoring batch。 */
+async function bindStarterHullAppearancesForRebuild(): Promise<{ readonly ok: boolean; readonly message: string; readonly bound: readonly string[] }> {
+  let result: { readonly ok: boolean; readonly message: string; readonly bound: readonly string[] } = {
+    ok: false,
+    message: '尚未执行新手船外观绑定',
+    bound: [],
+  };
+  try {
+    const manifestText = await editorAssetDb.readFile('db://assets/textures/pss/manifest.json');
+    const manifest = JSON.parse(manifestText) as PssManifest;
+    const selected = manifest.entries.filter((entry) => FIRST_HULL_VISUALS.some((item) => item.visualId === entry.visualId));
+    if (selected.length !== FIRST_HULL_VISUALS.length) {
+      return { ok: false, message: 'PSS manifest 缺少 4324/261 船体白名单条目', bound: [] };
+    }
+    const imported = await createPssImportPort({ sourceRoot: manifest.sourceRoot, targetRoot: Editor.Project.path }).importManifest({ ...manifest, entries: selected });
+    if (!imported.every((entry) => entry.ok)) {
+      return { ok: false, message: imported.map((entry) => `${entry.assetId}：${entry.message}`).join('；'), bound: [] };
+    }
+    await Editor.Message.request('asset-db', 'refresh-asset', 'db://assets/textures/pss/ship');
+    for (const item of FIRST_HULL_VISUALS) {
+      const url = `db://${item.target}`;
+      await waitForImportedTexture2D(editorAssetDb, url);
+    }
+    await openEditorAsset('db://assets/prefabs/ShipView.prefab');
+    result = await bindFirstHullAppearances(editorAssetDb, editorSceneQuery);
+    if (result.ok) await saveAuthoringScene();
+    return result;
+  } catch (cause) {
+    return { ok: false, message: cause instanceof Error ? cause.message : String(cause), bound: result.bound };
+  } finally {
+    try {
+      await openAuthoringSceneContext(editorSceneQuery, 'MAIN');
+    } catch {
+      // foundation 编排器会把恢复失败呈现为当前步骤失败；这里不覆盖原始错误。
+    }
+  }
+}
+
+/** Asset DB 导入是异步的；超过固定窗口仍无 Texture2D UUID 时必须失败闭环，不能继续写空引用。 */
+async function waitForImportedTexture2D(assetDb: AssetDbPort, assetUrl: string): Promise<string> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const uuid = await assetDb.queryUuid(`${assetUrl}/texture`);
+    if (uuid !== '') return uuid;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`导入船体贴图超时，未出现 Texture2D：${assetUrl}`);
+}
+
 function getSelectedNodeUuid(): string | undefined {
   try {
     const selection = (globalThis as {
@@ -330,20 +767,78 @@ function registerAssetChangeListener(): void {
 async function handleAssetChange(value: unknown): Promise<void> {
   const uuid = readAssetChangeUuid(value);
   if (uuid !== undefined && !await isAuthoringAssetChange(uuid)) return;
+  noteAuthoringAssetOperation(uuid);
+  noteAuthoringAssetOperation(getCurrentAuthoringAsset());
   if (!extensionLoaded) return;
+  if (authoringBatchDepth > 0) {
+    assetRefreshQueuedDuringBatch = true;
+    return;
+  }
+  if (uuid !== undefined) queueAuthoringContextRefresh(uuid);
   if (catalogRefreshTimer !== undefined) clearTimeout(catalogRefreshTimer);
   catalogRefreshTimer = setTimeout(() => {
     catalogRefreshTimer = undefined;
-    void Promise.all([refreshRoomCatalogNow(), refreshCrewCatalogNow(), refreshHullCatalogNow()]).catch((cause: unknown) => {
+    void refreshEditorCatalogsNow().catch((cause: unknown) => {
       console.warn(`[AUTHORING] 创作资源列表自动刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
     });
-  }, 200);
+  }, ASSET_OPERATION_QUIET_MS);
+}
+
+function beginAuthoringBatch(): void {
+  authoringBatchDepth += 1;
+  if (authoringBatchDepth === 1) getBroadcastMessagePort()?.broadcast?.(AUTHORING_BATCH_START_MESSAGE);
+  if (catalogRefreshTimer !== undefined) clearTimeout(catalogRefreshTimer);
+  if (authoringRefreshTimer !== undefined) clearTimeout(authoringRefreshTimer);
+  catalogRefreshTimer = undefined;
+  authoringRefreshTimer = undefined;
+  pendingAuthoringAssetUuid = undefined;
+}
+
+async function endAuthoringBatch(): Promise<void> {
+  authoringBatchDepth = Math.max(0, authoringBatchDepth - 1);
+  if (authoringBatchDepth !== 0) return;
+  try {
+    await waitForAuthoringQuiet();
+    if (assetRefreshQueuedDuringBatch) {
+      assetRefreshQueuedDuringBatch = false;
+      await refreshEditorCatalogsNow();
+    }
+  } catch (cause) {
+    console.warn(`[AUTHORING] 批量操作后的目录刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
+  } finally {
+    // 目录广播发生时面板仍保持暂停；全部 Creator Scene/Asset DB 操作结束后再恢复。
+    getBroadcastMessagePort()?.broadcast?.(AUTHORING_BATCH_END_MESSAGE);
+  }
+}
+
+function queueAuthoringContextRefresh(uuid: string): void {
+  pendingAuthoringAssetUuid = uuid;
+  if (authoringRefreshTimer !== undefined) clearTimeout(authoringRefreshTimer);
+  authoringRefreshTimer = setTimeout(() => {
+    authoringRefreshTimer = undefined;
+    const pending = pendingAuthoringAssetUuid;
+    pendingAuthoringAssetUuid = undefined;
+    if (pending !== undefined) void refreshAuthoringContextFromAsset(pending);
+  }, ASSET_OPERATION_QUIET_MS);
+}
+
+async function refreshAuthoringContextFromAsset(uuid: string): Promise<void> {
+  try {
+    const info = await editorAssetDb.queryInfo(uuid);
+    const url = info?.url ?? '';
+    if (!url.startsWith('db://assets/config/csv/') || !url.endsWith('.csv')) return;
+    // 广播只负责重建目录。具体草稿的预览由当前页面的显式 preview 消息触发，
+    // 不能在不知道被修改行 ID 时擅自把第一行房间推到当前场景。
+    await refreshEditorCatalogsNow();
+  } catch (cause) {
+    console.warn(`[AUTHORING] 当前预览自动刷新失败：${cause instanceof Error ? cause.message : String(cause)}`);
+  }
 }
 
 async function isAuthoringAssetChange(uuid: string): Promise<boolean> {
-  if (getRoomCatalog().some((entry) => entry.prefabUuid === uuid || entry.configUuid === uuid)) return true;
-  if (getCrewCatalog().some((entry) => entry.prefabUuid === uuid || entry.configUuid === uuid)) return true;
-  if (getHullCatalog().some((entry) => entry.configUuid === uuid)) return true;
+  if (getRoomCatalog().some((entry) => entry.prefabUuid === uuid)
+    || getCrewCatalog().some((entry) => entry.prefabUuid === uuid)
+    || (getHullCatalog() as readonly { readonly prefabUuid?: string }[]).some((entry) => entry.prefabUuid === uuid)) return true;
   try {
     const info = await editorAssetDb.queryInfo(uuid);
     return info === null || isAuthoringAssetUrl(info.url);
@@ -353,10 +848,14 @@ async function isAuthoringAssetChange(uuid: string): Promise<boolean> {
   }
 }
 
+function nextDraftId(prefix: 'room' | 'crew' | 'hull', existing: ReadonlySet<string>): string {
+  let index = 1;
+  while (existing.has(`${prefix}-new-${index}`)) index += 1;
+  return `${prefix}-new-${index}`;
+}
+
 function isAuthoringAssetUrl(url: string): boolean {
-  return (url.startsWith(`${ROOM_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
-    || (url.startsWith(`${CREW_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
-    || (url.startsWith(`${HULL_CONFIG_DIRECTORY}/`) && url.endsWith('.json'))
+  return (url.startsWith('db://assets/config/csv/') && url.endsWith('.csv'))
     || (url.startsWith(`${DEFAULT_PREFAB_DIRECTORY}/`) && url.endsWith('.prefab'));
 }
 
@@ -401,4 +900,19 @@ function getNodePath(tree: SceneNodeTree, uuid: string | undefined): string | un
     cursor = cursor.parent === undefined ? undefined : byUuid.get(cursor.parent);
   }
   return names.join('/');
+}
+
+function countPositionChanges(before: SceneNodeTree, after: SceneNodeTree): number {
+  const oldNodes = new Map(flattenTree(before).filter((node) => node.uuid !== undefined).map((node) => [node.uuid as string, node]));
+  let changed = 0;
+  for (const node of flattenTree(after)) {
+    if (node.uuid === undefined) continue;
+    const previous = oldNodes.get(node.uuid);
+    if (previous === undefined) continue;
+    const oldPosition = previous.position;
+    const newPosition = node.position;
+    if (oldPosition === undefined || newPosition === undefined) continue;
+    if (oldPosition.x !== newPosition.x || oldPosition.y !== newPosition.y || oldPosition.z !== newPosition.z) changed += 1;
+  }
+  return changed;
 }

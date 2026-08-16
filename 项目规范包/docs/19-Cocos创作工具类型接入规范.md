@@ -26,7 +26,7 @@
 
 ## 3. 数据边界
 
-- 业务实例与共享定义分离。实例 ID、定义 ID、逻辑格位置和校验结果属于实例 DTO；名称、分类、尺寸和规则数值属于共享 JSON 定义。
+- 业务实例与共享定义分离。实例 ID、定义 ID、逻辑格位置和校验结果属于实例 DTO；名称、分类、尺寸和规则数值属于共享 CSV 定义行。
 - Scene 数据使用公开 Scene API 读取、`set-property` 写入和 Scene snapshot 保存；配置数据使用公开 Asset DB 读取、校验和 `save-asset` 保存。
 - 不序列化 Node、Prefab 实例、Color/Asset 对象、世界像素坐标或未经筛选的组件对象。网格内容必须转换为整数逻辑坐标。
 - 稳定 ID、Prefab 引用和资源路径只读。可写属性必须有白名单、范围校验、失败回滚和一次 Undo 快照。
@@ -38,9 +38,15 @@
 
 每个识别结果至少显示节点名称、路径和类型语义。识别失败、定义缺失、组件缺失或场景配置非法时显示中文错误和可继续处理的只读信息，不显示空白面板，也不把未知组件字段透传给用户。
 
-房间、船员和船体目录是项目级 Asset DB 资源库，不属于当前 Scene。目录由 JSON 与真实 Prefab 依赖自动发现；扩展监听 `asset-db:asset-change` 并向面板发送目录变化通知。目录更新只刷新资源列表，不因 UUID 未变化抢走用户分页或手动资源选择。
+房间、船员、船体、地板和连接器目录是项目级 Asset DB 资源库，不属于当前 Scene。P8 目录由九张运行时权威 CSV（七张玩法表与两张视觉表）和一张仅编辑器使用的 `editor-prefabs.csv` 映射表生成；扩展监听 `asset-db:asset-change` 并向面板发送目录变化通知。目录更新只刷新资源列表，不因 UUID 未变化抢走用户分页或手动资源选择。
 
 当前 Scene 只提供显式实例放置目标：飞船创建到选中的 Main/Battle 挂载点；房间创建到选中的 ShipView 房间容器；船员创建到选中的目标 RoomView 所属 ShipView。没有明确作用域时必须中文报错，不回退到 Canvas 或场景根。目录资源不得复制到场景清单，也不得因为切换 Scene 而丢失。
+
+R1 P8 使用 `HullDefinition` schema 2、`RoomDefinition` schema 3、`CrewDefinition` schema 4。房间、船员和船体表单编辑对应 CSV 行，整批跨表校验通过后才能保存；`RoomView`、`CrewView` 和 `ShipView` 仍只返回白名单 DTO，不得透传原始组件 dump。
+
+R1 P7 的 PSS 素材页只返回白名单索引 DTO：支持中文名称、别名、实体 ID、source ID、类别和分页搜索；`fandom`、`uncategorized` 只显示诊断数量，不提供自动导入入口。导入必须先通过 manifest 的来源/目标路径、Hash、帧矩形和授权状态校验，再调用公开 Asset DB 或受控文件导入端口。插件关闭后，运行时不得依赖外部 `pss_full`。
+
+视觉资源的 SpriteFrame 裁切、船员头/身/腿组合、锚点和 AnimationClip 引用属于编辑器资产操作，不写入 GameCore 快照。面板可以预览和选择素材，但不能把外部绝对路径、原始 JSON 或组件 dump 透传给运行时；Prefab 重开后必须能从持久引用恢复同一视觉 ID 和播放参数。
 
 ## 5. 新类型接入模板
 
@@ -53,7 +59,7 @@
 标准语义节点：<无；或仅列出骨架中文名>
 只读 DTO：<字段、中文说明、单位>
 可写字段：<字段、范围、保存入口>
-定义资源：<JSON/Asset DB 路径与 schemaVersion>
+定义资源：<CSV 表名、稳定行 ID 与 schemaVersion>
 实例资源：<Scene/Prefab 路径与稳定实例 ID>
 校验入口：<函数或公开组件方法>
 错误状态：<缺失、非法、冲突时的中文提示>

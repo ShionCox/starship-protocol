@@ -1,0 +1,63 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "e90eeb32-d98c-457f-8f21-d070874c9c65",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "8ae72": {
+      "importer": "sprite-frame",
+      "uuid": "e90eeb32-d98c-457f-8f21-d070874c9c65@8ae72",
+      "displayName": "",
+      "id": "8ae72",
+      "name": "visual-pss-room-elevator-83-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 40,
+        "width": 25,
+        "height": 25,
+        "rawWidth": 25,
+        "rawHeight": 25,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "3c7ea2c9-f34f-4341-971b-0f3aa8194976@6c48a",
+        "atlasUuid": "e90eeb32-d98c-457f-8f21-d070874c9c65",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "83.png",
+    "format": 2,
+    "uuid": "e90eeb32-d98c-457f-8f21-d070874c9c65",
+    "textureUuid": "3c7ea2c9-f34f-4341-971b-0f3aa8194976@6c48a"
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "1337b600-bc19-41cb-9431-8dd615be3b1e",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "11b23": {
+      "importer": "sprite-frame",
+      "uuid": "1337b600-bc19-41cb-9431-8dd615be3b1e@11b23",
+      "displayName": "",
+      "id": "11b23",
+      "name": "appearance-pss-soldier-government-45-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "11428235-c703-4e22-bf41-2ea5065de9c3@6c48a",
+        "atlasUuid": "1337b600-bc19-41cb-9431-8dd615be3b1e",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "183c3": {
+      "importer": "sprite-frame",
+      "uuid": "1337b600-bc19-41cb-9431-8dd615be3b1e@183c3",
+      "displayName": "",
+      "id": "183c3",
+      "name": "appearance-pss-soldier-government-45-frame-001",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 32,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "11428235-c703-4e22-bf41-2ea5065de9c3@6c48a",
+        "atlasUuid": "1337b600-bc19-41cb-9431-8dd615be3b1e",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "appearance-pss-soldier-government-45.png",
+    "format": 2,
+    "uuid": "1337b600-bc19-41cb-9431-8dd615be3b1e",
+    "textureUuid": "11428235-c703-4e22-bf41-2ea5065de9c3@6c48a"
+  }
+}

@@ -1,4 +1,14 @@
-import type { RoomAuthoringValidation } from '../rooms/validate-open-room-prefab';
+import {
+  editorAssetDb,
+  getCurrentAuthoringAsset,
+  markCurrentAuthoringAsset,
+  noteAuthoringAssetOperation,
+  retryTransientAssetOperation,
+  waitForAuthoringAssetReady,
+  waitForAuthoringQuiet,
+} from './editor-asset-db';
+
+export interface RoomAuthoringValidation { readonly ok: boolean; readonly message: string; }
 
 export interface SceneComponentInfo {
   readonly uuid?: string;
@@ -75,6 +85,8 @@ export interface SceneQueryPort {
   }): Promise<SceneNodeCreation | null>;
   queryNodesByAssetUuid(assetUuid: string): Promise<readonly string[]>;
   createComponent(nodeUuid: string, component: string): Promise<void>;
+  /** Cocos 3.8 公开 remove-component，用于全新重建时移除旧脚本实例。 */
+  removeComponent(componentUuid: string): Promise<void>;
   removeNode(nodeUuid: string): Promise<void>;
   setProperty(
     target: SceneComponentTarget | string,
@@ -128,10 +140,29 @@ export const editorSceneQuery: SceneQueryPort = {
     return await Editor.Message.request('scene', 'query-nodes-by-asset-uuid', assetUuid) as readonly string[];
   },
   async createComponent(nodeUuid, component) {
-    await Editor.Message.request('scene', 'create-component', {
-      uuid: nodeUuid,
-      component,
-    });
+    let componentId = component;
+    let matchedClass: SceneComponentClassInfo | undefined;
+    let classes: readonly SceneComponentClassInfo[] = [];
+    if (!component.startsWith('cc.')) {
+      classes = await Editor.Message.request('scene', 'query-components') as readonly SceneComponentClassInfo[];
+      matchedClass = classes.find((entry) => entry.name === component || entry.path === component);
+      if (matchedClass === undefined) throw new Error(`Creator 尚未注册自定义组件：${component}`);
+      componentId = matchedClass.cid ?? matchedClass.name ?? component;
+    }
+    await Editor.Message.request('scene', 'create-component', { uuid: nodeUuid, component: componentId });
+    if (await nodeHasComponent(nodeUuid, component, classes)) return;
+
+    // Creator 3.8 文档允许 cid 或 className；部分脚本刚重载时旧 cid 会留在搜索器缓存，
+    // Scene 只写 Console 而不会 reject Message。用 className 重试并查询节点，避免虚报成功。
+    if (matchedClass?.name !== undefined && matchedClass.name !== componentId) {
+      await Editor.Message.request('scene', 'create-component', { uuid: nodeUuid, component: matchedClass.name });
+      if (await nodeHasComponent(nodeUuid, component, classes)) return;
+    }
+    const registration = matchedClass === undefined ? componentId : JSON.stringify(matchedClass);
+    throw new Error(`无法给节点 ${nodeUuid} 挂载 ${component}（注册信息：${registration}）`);
+  },
+  async removeComponent(componentUuid) {
+    await Editor.Message.request('scene', 'remove-component', { uuid: componentUuid });
   },
   async removeNode(nodeUuid) {
     await Editor.Message.request('scene', 'remove-node', { uuid: nodeUuid });
@@ -180,6 +211,71 @@ export const editorSceneQuery: SceneQueryPort = {
     await Editor.Message.request('scene', 'snapshot-abort');
   },
 };
+
+/** `.scene` 必须使用 Scene 进程的公开 open-scene；Asset DB open-asset 只用于 Prefab/普通资源。 */
+export async function openEditorSceneAsset(url: string): Promise<void> {
+  const previous = getCurrentAuthoringAsset();
+  if (previous !== null) await waitForAuthoringAssetReady(editorAssetDb, previous);
+  await waitForAuthoringQuiet();
+  const uuid = await Editor.Message.request('asset-db', 'query-uuid', url) as string | null;
+  if (typeof uuid !== 'string' || uuid.trim() === '') throw new Error(`Creator Asset DB 找不到场景：${url}`);
+  await retryTransientAssetOperation(async () => {
+    await Editor.Message.request('scene', 'open-scene', uuid);
+  });
+  markCurrentAuthoringAsset(url);
+}
+
+/**
+ * Creator 3.8.8 切换 Prefab 后可能仍在完成 Asset DB 导入，紧接着保存会短暂报
+ * `UNKNOWN: unknown error, open ...prefab`。保存是幂等操作，统一在公开 Scene
+ * 入口做有限重试，避免每个创作链各自复制等待逻辑。
+ */
+export async function saveAuthoringScene(
+  options: { readonly quietMs?: number; readonly retryDelayMs?: number } = {},
+): Promise<void> {
+  const assetUrl = getCurrentAuthoringAsset();
+  const retryDelayMs = options.retryDelayMs ?? 1000;
+  if (assetUrl !== null) await waitForAuthoringAssetReady(editorAssetDb, assetUrl, { quietMs: options.quietMs });
+  // Scene/Prefab 保存最终会进入 asset-db/save-asset。当前文档 imported=true
+  // 仍可能与其它图集、Clip 的后台导入重叠，因此保存前必须经过同一全局屏障。
+  await waitForAuthoringQuiet({ quietMs: options.quietMs });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await Editor.Message.request('scene', 'save-scene');
+      noteAuthoringAssetOperation(assetUrl);
+      if (assetUrl !== null) await waitForAuthoringAssetReady(editorAssetDb, assetUrl, { quietMs: options.quietMs });
+      return;
+    } catch (cause) {
+      lastError = cause;
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (!/UNKNOWN|EBUSY|EPERM|\bopen\b/i.test(message) || attempt === 19) break;
+      if (retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+  throw lastError;
+}
+
+async function nodeHasComponent(nodeUuid: string, component: string, classes: readonly SceneComponentClassInfo[]): Promise<boolean> {
+  const raw = await Editor.Message.request('scene', 'query-node', nodeUuid);
+  const normalized = normalizeSceneNodeTree(raw);
+  if ((normalized.components ?? []).some((entry) => componentTypeMatches(entry, component, classes))) return true;
+  // Creator 某些版本只在 query-node-tree 返回完整组件注册信息，
+  // query-node 的压缩 dump 可能只有 UUID；再读一次公开树，避免把已挂载组件误判为缺失。
+  const tree = await Editor.Message.request('scene', 'query-node-tree');
+  return flattenSceneTree(normalizeSceneNodeTree(tree)).some((node) => node.uuid === nodeUuid
+    && (node.components ?? []).some((entry) => componentTypeMatches(entry, component, classes)));
+}
+
+function flattenSceneTree(tree: SceneNodeTree): readonly SceneNodeTree[] {
+  const result: SceneNodeTree[] = [];
+  const visit = (node: SceneNodeTree): void => {
+    result.push(node);
+    for (const child of node.children ?? []) visit(child);
+  };
+  visit(tree);
+  return result;
+}
 
 /**
  * 判断 query-node-tree 返回的组件是否属于指定类。

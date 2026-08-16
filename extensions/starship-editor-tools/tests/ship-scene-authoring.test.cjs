@@ -3,7 +3,7 @@ const test = require('node:test');
 
 const { createShipInstance, nextShipInstanceId } = require('../dist/hulls/ship-scene-authoring.js');
 
-const hull = { id: 'hull-starter', displayName: '初始护卫舰', configUuid: 'hull-config' };
+const hull = { id: 'hull-starter', displayName: '初始护卫舰', prefabUrl: 'db://assets/prefabs/ShipView.prefab', prefabUuid: 'ship-prefab', visualId: 'visual-hull-starter', gridWidth: 20, gridHeight: 10, validCells: [], level: 1, maxCrew: 12, maxRooms: 24 };
 
 test('飞船实例 ID 按当前场景最低空闲序号生成', () => {
   assert.equal(nextShipInstanceId(['ship-1', 'ship-3']), 'ship-2');
@@ -32,7 +32,7 @@ test('在明确挂载点创建 ShipView Prefab，写入飞船和船体作用域�
   assert.equal(result.ok, true);
   assert.equal(calls.some((call) => call[0] === 'set' && call[1] === 'shipId' && call[2] === 'ship-1'), true);
   assert.equal(calls.some((call) => call[0] === 'set' && call[1] === '_lpos' && call[2]?.type === 'cc.Vec3' && call[2]?.value?.x === 0), true);
-  assert.equal(calls.some((call) => call[0] === 'set' && call[1] === 'hullDefinitionAsset' && call[2].uuid === 'hull-config'), true);
+  assert.equal(calls.some((call) => call[0] === 'set' && call[1] === 'hullDefinitionId' && call[2] === 'hull-starter'), true);
   assert.deepEqual(calls.filter(([name]) => name === 'end'), [['end']]);
   delete global.Editor;
 });

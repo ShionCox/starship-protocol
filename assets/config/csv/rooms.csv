@@ -1,0 +1,8 @@
+﻿id,displayName,category,width,height,maxLevel,maxHp,minPower,maxPower,powerGeneration,crewCapacity,healingHpPerTick,verticalConnectorKind,visualId,metalCost,buildDurationMs,demolishDurationMs,refundPermille
+#稳定标识,中文名称,分类,宽度,高度,最大等级,最大生命,最小耗能,最大耗能,发电量,船员容量,每Tick治疗,垂直连接器类型,视觉标识,金属成本,建造时长毫秒,拆除时长毫秒,返还千分比
+room-elevator,电梯,MOVEMENT,2,4,1,100,0,0,0,1,0,ELEVATOR,visual-pss-room-elevator-83,100,20000,8000,500
+room-stairs,楼梯,MOVEMENT,2,4,1,100,0,0,0,1,0,STAIRS,visual-room-stairs-placeholder,50,10000,5000,500
+room-reactor,反应堆,ENERGY,5,3,1,100,0,0,10,2,0,NONE,visual-pss-room-reactor-808,150,30000,10000,500
+room-laser,激光室,WEAPON,4,3,1,100,2,6,0,2,0,NONE,visual-pss-room-laser-8285,120,25000,8000,500
+room-shield,护盾室,DEFENSE,4,3,1,120,2,6,0,2,0,NONE,visual-pss-room-shield-8041,140,30000,10000,500
+room-medbay,医疗室,SUPPORT,4,3,1,100,2,2,0,2,1,NONE,visual-pss-room-medbay-1107,100,20000,8000,500

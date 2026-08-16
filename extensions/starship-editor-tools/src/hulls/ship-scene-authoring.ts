@@ -11,7 +11,7 @@ import {
   type SceneNodeTree,
   type SceneQueryPort,
 } from '../shared/editor-scene';
-import type { HullCatalogEntry } from './hull-catalog';
+import type { EditorHullCatalogEntry as HullCatalogEntry } from '../csv/editor-catalog';
 
 /** 在明确选中的飞船挂载点创建 ShipView Prefab，并写入所属场景唯一的飞船实例 ID。 */
 export async function createShipInstance(
@@ -52,15 +52,13 @@ export async function createShipInstance(
     if (componentTarget === undefined) throw new Error('ShipView Prefab 缺少飞船视图组件');
     if (!(await scene.setProperty(componentTarget, 'shipId', shipId, { record: false }))) throw new Error('无法写入飞船实例标识');
     if (!(await scene.setProperty(componentTarget, 'hullDefinitionId', hull.id, { record: false }))) throw new Error('无法写入船体定义标识');
-    if (!(await scene.setProperty(componentTarget, 'hullDefinitionAsset', { type: 'cc.JsonAsset', uuid: hull.configUuid }, { record: false }))) throw new Error('无法绑定船体定义 JSON');
     await scene.endRecording(undoId);
     undoId = undefined;
     selectNode(createdUuid);
     return { ok: true, message: `已创建飞船实例：${shipId}（${hull.displayName}）`, nodeUuid: createdUuid };
   } catch (cause) {
-    if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     if (undoId !== undefined) await scene.cancelRecording(undoId).catch(() => undefined);
-    await scene.snapshotAbort().catch(() => undefined);
+    if (createdUuid !== undefined) await scene.removeNode(createdUuid).catch(() => undefined);
     return { ok: false, message: `${toMessage(cause)}；已回滚临时飞船节点` };
   }
 }

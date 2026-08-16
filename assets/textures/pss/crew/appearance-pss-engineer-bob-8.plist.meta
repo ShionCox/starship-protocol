@@ -1,0 +1,109 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "a65aa2fc-096a-4aaa-913b-7d065ea19c24",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "d25a3": {
+      "importer": "sprite-frame",
+      "uuid": "a65aa2fc-096a-4aaa-913b-7d065ea19c24@d25a3",
+      "displayName": "",
+      "id": "d25a3",
+      "name": "appearance-pss-engineer-bob-8-frame-000",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "3e3e5ac3-0df1-4269-9699-fd5fbda591a4@6c48a",
+        "atlasUuid": "a65aa2fc-096a-4aaa-913b-7d065ea19c24",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "8f94e": {
+      "importer": "sprite-frame",
+      "uuid": "a65aa2fc-096a-4aaa-913b-7d065ea19c24@8f94e",
+      "displayName": "",
+      "id": "8f94e",
+      "name": "appearance-pss-engineer-bob-8-frame-001",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 32,
+        "trimY": 0,
+        "width": 32,
+        "height": 32,
+        "rawWidth": 32,
+        "rawHeight": 32,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [],
+          "indexes": [],
+          "uv": [],
+          "nuv": [],
+          "minPos": [],
+          "maxPos": []
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "3e3e5ac3-0df1-4269-9699-fd5fbda591a4@6c48a",
+        "atlasUuid": "a65aa2fc-096a-4aaa-913b-7d065ea19c24",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "atlasTextureName": "appearance-pss-engineer-bob-8.png",
+    "format": 2,
+    "uuid": "a65aa2fc-096a-4aaa-913b-7d065ea19c24",
+    "textureUuid": "3e3e5ac3-0df1-4269-9699-fd5fbda591a4@6c48a"
+  }
+}

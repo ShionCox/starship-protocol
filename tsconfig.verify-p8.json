@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [],
+    "noEmit": true
+  },
+  "files": [
+    "temp/declarations/jsb.d.ts",
+    "temp/declarations/cc.custom-macro.d.ts",
+    "temp/declarations/cc.d.ts",
+    "temp/declarations/cc.env.d.ts"
+  ],
+  "include": ["assets/**/*.ts"],
+  "exclude": ["extensions", "tests"]
+}

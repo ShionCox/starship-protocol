@@ -1,0 +1,4 @@
+﻿id,displayName,value
+#稳定标识,字段标识,字段中文说明
+config-version,配置版本,r1-p8-close-1
+initial-metal,初始金属,1000
