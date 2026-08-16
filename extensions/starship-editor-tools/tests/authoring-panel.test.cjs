@@ -28,6 +28,7 @@ test('创作面板只在可见期间轮询选择，选择未变化时不重复�
   const saveDraftRequests = [];
   const updateRequests = [];
   const sentMessages = [];
+  const notices = [];
   const broadcastListeners = new Map();
   const removedBroadcastListeners = [];
   let nextTimer = 1;
@@ -45,6 +46,15 @@ test('创作面板只在可见期间轮询选择，选择未变化时不重复�
   global.document = { createElement: () => element() };
   global.Editor = {
     Panel: { define(value) { definition = value; return value; } },
+    Task: {
+      addNotice(options) { notices.push(options); return notices.length; },
+      removeNotice() {},
+    },
+    Dialog: {
+      warn: async () => ({ response: 0 }),
+      select: async () => ({ canceled: true, filePaths: [] }),
+    },
+    Project: { path: 'G:/WebProjects/starship-protocol' },
     Selection: { getSelected() { return selected; } },
     Message: {
       async request(_packageName, message) {
@@ -104,7 +114,7 @@ test('创作面板只在可见期间轮询选择，选择未变化时不重复�
   const panel = {
     $: {
       selection: element(), target: element(), sceneBadge: element(), roomCount: element(), sync: element(), newRoom: element(),
-      sceneKind: element(), initialize: element(), createFoundation: element(), rebuildP8StarterShip: element(), configureP8: element(), mountSharedUi: element(), wireFoundation: element(), cancelAuthoringPreview: element(), pagePreviewKind: element(), previewPage: element(), openPagePrefab: element(), sceneRefresh: element(), refresh: element(), list: element(), status: element(), selectionDirtyBanner: element(),
+      createOrUpdateBoot: element(), createOrUpdateMain: element(), createOrUpdateBattle: element(), sceneRefresh: element(), refresh: element(), list: element(), status: element(), selectionDirtyBanner: element(),
       navWarningCount: element(), roomSearch: element(), roomCategories: element(), roomInspector: element(), roomEmpty: element(),
       editTitle: element(), editState: element(), editId: element(), editPath: element(), editDisplayName: element(), editCategory: element(), editWidth: element(), editHeight: element(), editMaxLevel: element(), editMaxHp: element(), editMinPower: element(), editMaxPower: element(), editPowerGeneration: element(), editCrewCapacity: element(), editHealingHp: element(), saveRoom: element(), createSelectedRoom: element(), openSelectedPrefab: element(), validationSummary: element(), validationList: element(),
       editVerticalConnectorKind: element(), editVisualId: element(), editMetalCost: element(), editBuildDurationMs: element(), editDemolishDurationMs: element(), editRefundPermille: element(), editConnectorPorts: element(), cancelRoom: element(), roomInstanceEditor: element(), editInstanceX: element(), editInstanceY: element(), editInstanceHp: element(), saveRoomInstance: element(), cancelRoomInstance: element(),
@@ -122,6 +132,11 @@ test('创作面板只在可见期间轮询选择，选择未变化时不重复�
   assert.equal(panel.$.pageRooms.hidden, false);
   assert.equal(panel.$.pageScene.hidden, true);
   assert.equal(panel.$.roomInstanceInfo.hidden, false);
+  panel.$.cancelRoomInstance.listeners.confirm();
+  assert.equal(notices.at(-1).type, 'success');
+  assert.equal(notices.at(-1).source, '星舰创作工具');
+  assert.equal(notices.at(-1).timeout, 3000);
+  assert.match(notices.at(-1).title, /房间实例/);
   assert.equal(broadcastListeners.has('starship-editor-tools:room-catalog-change'), true);
   assert.equal(broadcastListeners.has('starship-editor-tools:authoring-batch-start'), true);
   assert.equal(broadcastListeners.has('starship-editor-tools:authoring-batch-end'), true);
@@ -159,6 +174,13 @@ test('创作面板只在可见期间轮询选择，选择未变化时不重复�
   panel.$.saveRoom.listeners.confirm();
   await Promise.resolve();
   assert.equal(saveDraftRequests[0].draft.displayName, '反应堆新名');
+  panel.$.editConnectorPorts.value = 'invalid-row';
+  panel.$.saveRoom.listeners.confirm();
+  assert.equal(notices.at(-1).type, 'error');
+  assert.equal(notices.at(-1).timeout, 8000);
+  const noticeCountAfterError = notices.length;
+  panel.$.saveRoom.listeners.confirm();
+  assert.equal(notices.length, noticeCountAfterError);
   assert.deepEqual(sentMessages, []);
 
   definition.listeners.hide();
@@ -173,22 +195,20 @@ test('创作面板只在可见期间轮询选择，选择未变化时不重复�
   delete global.document;
 });
 
-test('场景页提供 P8.3 全新重建和取消预览公开消息入口', () => {
+test('场景页只提供三个一键场景入口，并保留领域预览清理消息', () => {
   const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'panels', 'authoring-panel.ts'), 'utf8');
-  assert.match(source, /id="rebuildP8StarterShip"/);
-  assert.match(source, /全新重建 P8\.3 资源与标准新手船/);
-  assert.match(source, /rebuild-p8-starter-ship/);
-  assert.match(source, /id="cancelAuthoringPreview"/);
-  assert.match(source, /cancel-authoring-preview/);
+  assert.match(source, /id="createOrUpdateBoot"/);
+  assert.match(source, /id="createOrUpdateMain"/);
+  assert.match(source, /id="createOrUpdateBattle"/);
+  assert.equal((source.match(/id="createOrUpdate(?:Boot|Main|Battle)"/g) ?? []).length, 3);
+  assert.match(source, /'create-or-update-scene'/);
+  assert.doesNotMatch(source, /rebuildP8StarterShip|rebuild-p8-starter-ship|createFoundation|mountSharedUi|wireFoundation/);
 });
 
-test('场景页提供页面隔离预览与 Prefab 打开入口', () => {
+test('场景页不再提供独立页面预览或 Prefab 打开按钮', () => {
   const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'panels', 'authoring-panel.ts'), 'utf8');
-  assert.match(source, /id="pagePreviewKind"/);
-  assert.match(source, /id="previewPage"/);
-  assert.match(source, /id="openPagePrefab"/);
-  assert.match(source, /'preview-page'/);
-  assert.match(source, /'open-page-prefab'/);
+  assert.doesNotMatch(source, /id="pagePreviewKind"|id="previewPage"|id="openPagePrefab"/);
+  assert.doesNotMatch(source, /'preview-page'|'open-page-prefab'/);
 });
 
 test('PSS 船体外观按钮完成 Panel 映射并注册公开绑定消息', () => {
@@ -198,12 +218,31 @@ test('PSS 船体外观按钮完成 Panel 映射并注册公开绑定消息', () 
   assert.match(source, /import-and-bind-first-pss-hull-appearances/);
 });
 
-test('主入口提供页面预览和隔离 Prefab 打开方法', () => {
+test('主入口保留统一场景编排方法，页面预览由 MainScreen Inspector 承担', () => {
   const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main.ts'), 'utf8');
-  assert.match(source, /previewPage\(page/);
-  assert.match(source, /openPagePrefab\(page/);
-  assert.match(source, /MainPageRouter/);
-  assert.match(source, /showMainMenu/);
+  assert.match(source, /createOrUpdateScene\(kind/);
+  assert.doesNotMatch(source, /previewPage\(page|openPagePrefab\(page/);
+  const router = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', '..', 'assets', 'scripts', 'presentation', 'MainPageRouter.ts'), 'utf8');
+  assert.match(router, /showMainMenu/);
+});
+
+test('创作工具统一使用 Cocos 原生通知并保留就地详情策略', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'panels', 'authoring-panel.ts'), 'utf8');
+  assert.match(source, /addNotice/);
+  assert.match(source, /source: '星舰创作工具'/);
+  assert.match(source, /NOTICE_TIMEOUTS/);
+  assert.match(source, /summarizeNotice/);
+  assert.match(source, /setInlineDetail\(fullMessage, kind, scope\)/);
+  assert.doesNotMatch(source, /showStatus\s*\(/);
+});
+
+test('CSV 文件导入使用公开 Dialog.select，并将取消标记为正常取消', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main.ts'), 'utf8');
+  assert.match(source, /select\?:/);
+  assert.match(source, /type: 'file'/);
+  assert.match(source, /multi: true/);
+  assert.match(source, /cancelled: true/);
+  assert.doesNotMatch(source, /openFile/);
 });
 
 test('领域草稿统一使用 DraftSession，并让 crew/hull 预览具备防迟到序列', () => {

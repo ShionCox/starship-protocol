@@ -33,9 +33,9 @@ FinalHash 必须完全一致
 - ShipView 的 HullDefinition、子节点和场景装配引用完整，Scene/View/Prefab 没有重复规则网格；
 - 设计人员可调属性具有中文名称、中文提示和合理分组，修改后预览立即更新；
 - 网格化内容可在编辑器中拖动并自动吸附；保存、关闭、重开后位置一致；
-- UIRoot 只保存 MainScreen/BattleHUD/弹窗等模块 Prefab 实例；MainScreen 的页面挂载点为空，五个主页面只保存 Prefab 引用；
-- 五个主页面可独立打开、移动、保存并重开后位置不漂移；组合 UIRoot 仍保持同一视觉基线；
-- 运行时只绑定编辑器实例，不动态补正式节点、房间、船员或 UI；主页面切换只 instantiate 一个页面并在卸载时 destroy 旧实例；
+- UIRoot 只保存 MainScreen/BattleHUD 两个核心 Prefab 实例；弹窗与公共面板为持久普通节点，MainScreen 的页面层固定包含五个页面节点；
+- MainScreen 五个页面、公共面板和导航贴图可直接选中、移动、保存并重开后位置不漂移；组合 UIRoot 仍保持当前有效视觉基线且没有深层覆盖；
+- 运行时只绑定编辑器实例，不动态补正式节点、房间、船员或 UI；主页面切换只改变目标节点 active，禁止 instantiate/destroy 页面；BuildOptionCard/PowerRoomRow 仅作为数据重复模板动态复用；
 - 保存一张场景层级与画面截图、一张中文 Inspector 截图，作为完成证据。
 
 涉及项目编辑器扩展时还必须验证：
@@ -44,15 +44,17 @@ FinalHash 必须完全一致
 - 资源管理器菜单与中文表单可打开，合法输入能更新权威 CSV、编辑器 Prefab 映射与持久 Prefab；
 - 项目菜单和 Panel 菜单打开同一个中文“星舰创作工具”，面板在隐藏/关闭时停止轮询；
 - Boot/Main/Battle 骨架只补齐中文节点/组件，重名或错误父级停止并回滚，不创建一次性玩法内容；
-- P8.3 重建前预检全部 UI 模块 Prefab；缺失时 fail-closed，模块升级只补缺失引用/组件，不覆盖设计人员位置；
+- P8.3 场景固定分支执行前预检全部正式 UI Prefab、共享 CSV 与外观资源；缺失时 fail-closed，更新只补缺失引用/组件，不覆盖设计人员位置；
 - Hull/Room/Crew 菜单由九张权威 CSV 与 `editor-prefabs.csv` 真实依赖生成，非法定义或缺失绑定不进入可创建列表；
 - 飞船实例在明确挂载点生成唯一 shipId；房间/船员只在明确 ShipView 内创建，没有作用域时不启动 Undo；
 - 非法 ID、非法路径、重名和写入失败不会覆盖既有资产；
-- 创建中途失败会回滚，回滚失败会报告残留资产路径；
+- 每个 Prefab/Scene 阶段独立记录并保存；失败取消当前阶段记录，报告场景类型、失败阶段与已保存阶段，不伪装成跨资源事务回滚；
 - 新 Prefab 自动绑定定义并保存；Prefab 默认实例 ID 为空；
 - 关闭插件后，场景运行、GameCore 测试和 Web Desktop 构建不受影响；
 - 选择房间、船员、飞船、中文语义节点和普通节点时，只显示注册的白名单 DTO；识别顺序保持稳定。
 - CSV/Prefab 新增、修改、删除或重新导入后目录自动刷新，不维护第二份运行时规则清单。
+- 创作面板所有主动操作结果使用 `Editor.Task.addNotice` 原生通知：标题、类型、来源“星舰创作工具”和超时符合规范；Toast 摘要截断，完整错误保留在就地详情区，重复后台错误不会连续轰炸。
+- 进行中状态和自动预览不产生 Toast；未保存草稿/选择冲突保留可操作横幅；危险操作使用 `Editor.Dialog.warn` 且接口缺失时 fail-closed；CSV 选择使用 `Editor.Dialog.select`，用户取消返回 `cancelled` 并不算失败。
 - clean build 后运行插件测试；`dist` 不由 Git 跟踪。
 
 ---

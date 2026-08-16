@@ -40,11 +40,14 @@
         "__id__": 28
       },
       {
+        "__id__": 32
+      },
+      {
         "__id__": 30
       }
     ],
     "_prefab": {
-      "__id__": 32
+      "__id__": 34
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -311,7 +314,7 @@
     "_string": "",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 17,
+    "_actualFontSize": 23,
     "_fontSize": 18,
     "_fontFamily": "Arial",
     "_lineHeight": 23,
@@ -470,7 +473,7 @@
     "_string": "",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 15,
+    "_actualFontSize": 20,
     "_fontSize": 14,
     "_fontFamily": "Arial",
     "_lineHeight": 19,
@@ -629,7 +632,7 @@
     "_string": "",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 13,
+    "_actualFontSize": 17,
     "_fontSize": 12,
     "_fontFamily": "Arial",
     "_lineHeight": 17,
@@ -725,6 +728,25 @@
     "__prefab": {
       "__id__": 29
     },
+    "button": {
+      "__id__": 30
+    },
+    "normalSprite": {
+      "__uuid__": "247f982f-264b-4873-8fd3-a9a2c60b7731@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "hoverSprite": {
+      "__uuid__": "726be357-06d0-4635-943e-4570853b12ad@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "pressedSprite": {
+      "__uuid__": "994e727a-4a23-4519-bdcc-01dff861846d@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "disabledSprite": {
+      "__uuid__": "7deaad1f-ad7a-44da-8fbf-ffaaf426714b@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
     "preview": {
       "__id__": 5
     },
@@ -744,7 +766,7 @@
     "fileId": "b3K6xWT7pJGId6uvem7mWp"
   },
   {
-    "__type__": "cc.Graphics",
+    "__type__": "cc.Button",
     "_name": "",
     "_objFlags": 0,
     "__editorExtras__": {},
@@ -754,6 +776,76 @@
     "_enabled": true,
     "__prefab": {
       "__id__": 31
+    },
+    "clickEvents": [],
+    "_interactable": true,
+    "_transition": 2,
+    "_normalColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 255
+    },
+    "_hoverColor": {
+      "__type__": "cc.Color",
+      "r": 211,
+      "g": 211,
+      "b": 211,
+      "a": 255
+    },
+    "_pressedColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 255
+    },
+    "_disabledColor": {
+      "__type__": "cc.Color",
+      "r": 124,
+      "g": 124,
+      "b": 124,
+      "a": 255
+    },
+    "_normalSprite": {
+      "__uuid__": "247f982f-264b-4873-8fd3-a9a2c60b7731@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "_hoverSprite": {
+      "__uuid__": "726be357-06d0-4635-943e-4570853b12ad@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "_pressedSprite": {
+      "__uuid__": "994e727a-4a23-4519-bdcc-01dff861846d@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "_disabledSprite": {
+      "__uuid__": "7deaad1f-ad7a-44da-8fbf-ffaaf426714b@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "_duration": 0.1,
+    "_zoomScale": 1.2,
+    "_target": {
+      "__id__": 1
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "779ebi+91OcLUf3jQj0EML"
+  },
+  {
+    "__type__": "cc.Sprite",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 33
     },
     "_customMaterial": null,
     "_srcBlendFactor": 2,
@@ -765,29 +857,28 @@
       "b": 255,
       "a": 255
     },
-    "_lineWidth": 1,
-    "_strokeColor": {
-      "__type__": "cc.Color",
-      "r": 70,
-      "g": 151,
-      "b": 180,
-      "a": 255
+    "_spriteFrame": {
+      "__uuid__": "247f982f-264b-4873-8fd3-a9a2c60b7731@f9941",
+      "__expectedType__": "cc.SpriteFrame"
     },
-    "_lineJoin": 2,
-    "_lineCap": 0,
-    "_fillColor": {
-      "__type__": "cc.Color",
-      "r": 24,
-      "g": 45,
-      "b": 57,
-      "a": 245
+    "_type": 0,
+    "_fillType": 0,
+    "_sizeMode": 0,
+    "_fillCenter": {
+      "__type__": "cc.Vec2",
+      "x": 0,
+      "y": 0
     },
-    "_miterLimit": 10,
+    "_fillStart": 0,
+    "_fillRange": 0,
+    "_isTrimmedMode": true,
+    "_useGrayscale": false,
+    "_atlas": null,
     "_id": ""
   },
   {
     "__type__": "cc.CompPrefabInfo",
-    "fileId": "e6R5Jc3mtBVITnfQhfUUto"
+    "fileId": "eeqmAvFWVPTICQAo4NO2Rh"
   },
   {
     "__type__": "cc.PrefabInfo",

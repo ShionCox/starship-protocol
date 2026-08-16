@@ -65,11 +65,12 @@ BattleScene
 - 动态重复内容仍使用 Prefab + 配置实例化；对应 Prefab 必须能单独打开预览，必要时在测试场景放置一个代表实例。
 - Bootstrap 负责连接编辑器实例与 GameCore，不替代场景搭建；场景中已有实例时必须优先复用，避免运行时重复生成。
 - 船体规则网格来自 HullDefinition；ShipView 只持有格子像素尺寸、颜色和子节点引用等表现配置。
-- 设计人员从项目菜单或 Panel 菜单打开“星舰创作工具”，在面板中补齐 Boot/Main/Battle 中文骨架、创建船体/飞船/房间/船员并刷新校验。
+- 设计人员从项目菜单或 Panel 菜单打开“星舰创作工具”；“场景”页只提供“一键创建/更新启动界面”“一键创建/更新主界面”“一键创建/更新战斗界面”三个入口，其他房间、船员、船体和 CSV 编辑仍在各自领域页完成。
+- 三个场景入口统一走 `create-or-update-scene` 消息和 `createOrUpdateScene(kind)` 固定分支；更新只补齐缺失结构/引用，不覆盖已有手工布局或有效自定义贴图。旧迁移、P8 全量重建、独立挂载/连接和页面预览入口不再存在。
 - 新骨架只识别中文语义名。旧 Prototype 英文别名和运行时兼容补齐链已经删除。
-- Bootstrap 只连接已序列化引用。缺少 ShipView、UIRoot、Panel 或关键组件时中文报错并停止；唯一的运行时 UI 节点创建是本 ADR 规定的主页面 Prefab 挂载，其他正式节点不得由脚本补建。
+- Bootstrap 只连接已序列化引用。缺少 ShipView、UIRoot、Panel 或关键组件时中文报错并停止；主界面五页、公共面板和弹窗均由 Prefab/Scene 持久保存，运行时只切换节点 active，不补建正式 UI 节点。
 - Main/Battle 的九张权威 CSV `TextAsset` 只在各自“应用根”的唯一 `GameConfigCsvSource` 持久保存；场景 ShipView 显式引用该来源，RoomView/CrewView 只从所属 ShipView 读取。BootScene 与独立领域 Prefab 不保存配置来源。
-- MainScene 启动后通过 `director.preloadScene('BattleScene')` 低优先级预加载战斗场景；页面实例按路由销毁，但页面 Prefab/贴图继续由 `main` Bundle 持有，不新增页面缓存或主动资源释放。自定义 Asset Bundle 等动态资源和包体规模出现实际需求后再接入。
+- MainScene 启动后通过 `director.preloadScene('BattleScene')` 低优先级预加载战斗场景；页面作为 MainScreen 的持久普通节点保存，路由只切换 active，不新增页面缓存、动态加载或主动资源释放。自定义 Asset Bundle 等动态资源和包体规模出现实际需求后再接入。
 - Prefab、Inspector 中文字段、编辑器预览和吸附细则统一见 `05-资源与Prefab规范.md`；装饰器写法见 `15-编码与注释规范.md`。
 
 ## 7.2 UI 层级
@@ -78,15 +79,20 @@ BattleScene
 UIRoot.prefab
 ├─ 主界面内容根 → MainScreen.prefab
 │  ├─ 主导航栏 / 顶栏 / HUD 框架
-│  ├─ 页面挂载点（保存时为空）
-│  ├─ PowerPanel.prefab
-│  └─ CrewStatusPanel.prefab
+│  ├─ 页面层
+│  │  ├─ 主菜单页面
+│  │  ├─ 星图页面
+│  │  ├─ 飞船页面
+│  │  ├─ 建造页面（BuildPageController）
+│  │  └─ 船员页面
+│  ├─ 能源面板（PowerPanel 组件与节点）
+│  └─ 船员状态面板（CrewStatusPanel 组件与节点）
 ├─ 战斗界面内容根 → BattleHUD.prefab
 ├─ 弹窗层
-│  ├─ SettingsPopup.prefab
-│  ├─ WorldContextMenu.prefab
-│  ├─ DemolitionConfirmDialog.prefab
-│  └─ OfflineSettlementDialog.prefab
+│  ├─ 设置弹窗（普通节点）
+│  ├─ 世界交互模块（普通节点）
+│  ├─ 拆除确认弹窗（普通节点）
+│  └─ 离线结算弹窗（普通节点）
 ├─ 提示层
 └─ 加载层
 ```
@@ -97,23 +103,23 @@ UIRoot 不包含飞船、房间、船员、弹道或战斗特效。MainScene 与
 
 ### P0/R1
 
-- `MainMenuPage`
-- `GalaxyMapPage`
-- `ShipMainPage`
-- `BuildPage`
+- `MainMenuPage`（MainScreen 持久节点）
+- `GalaxyMapPage`（MainScreen 持久节点）
+- `ShipMainPage`（MainScreen 持久节点）
+- `BuildPage`（MainScreen 持久节点）
 - `RoomDetailPopup`
 - `CrewPage`
 - `CrewDetailPopup`
-- `PowerPanel`
+- `PowerPanel`（MainScreen 内组件）
 - `AIRulePage`
 - `BattleHUD`
 - `BattleResultPopup`
-- `SettingsPopup`
+- `SettingsPopup`（UIRoot 弹窗层普通节点）
 
-五个主页面 Prefab（`MainMenuPage`、`GalaxyMapPage`、`ShipMainPage`、`BuildPage`、`CrewPage`）只作为 `MainPageRouter` 的序列化资源引用，不保存页面实例。`MainPageRouter` 切页时使用 Cocos `instantiate(Prefab)` 挂入唯一“页面挂载点”，完成绑定后销毁旧页面；任何时刻最多一个活动页面实例，实例化或绑定失败时回滚到旧页面。
-`MainPageRouter` 每次只激活一个页面：主菜单/星图隐藏公共能源与船员状态，飞船显示二者，建造只显示建造页，船员显示船员页与状态面板；设置弹窗暂时隐藏公共面板，关闭后恢复打开前页面。设置弹窗、能源/船员面板、战斗 HUD 和其他弹窗是持久嵌套 Prefab，不随页面切换销毁。
-建造页挂载时由 `MainSceneBootstrap` 获取其 `BuildPageController` 并绑定最新快照；卸载时清空引用并执行 `onDisable()` 取消拖拽，再次进入时重置分类、滚动位置和卡片缓存。
-创作工具的页面预览在隔离 UIRoot Prefab 上执行，连接场景引用时恢复主菜单默认状态。
+五个主页面是 `MainScreen` 下的持久普通节点，并由 `MainPageRouter` 序列化引用。切页只激活目标节点并保证其余页面 inactive，不再 instantiate/destroy 页面实例。
+`MainPageRouter` 每次只激活一个页面：主菜单/星图隐藏公共能源与船员状态，飞船显示二者，建造只显示建造页，船员显示船员页与状态面板；设置弹窗暂时隐藏公共面板，关闭后恢复打开前页面。设置弹窗、能源/船员面板、战斗 HUD 和其他弹窗均保留在 UIRoot/MainScreen 的持久层级中。
+建造页由 `MainSceneBootstrap` 直接持久引用 `BuildPageController` 并绑定最新快照；页面隐藏时由 `onDisable()` 注销事件、取消拖拽，再次显示时重置分类与滚动位置但保留卡片缓存。
+创作工具直接打开 `MainScreen` 源 Prefab，通过 `MainPageRouter` 的中文“编辑器预览页面”枚举切换持久节点；运行时无条件从主菜单开始。
 
 ### P1/R2
 

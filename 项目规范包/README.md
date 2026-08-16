@@ -112,7 +112,8 @@ flowchart TB
 | Cocos 编辑器创作入口收敛决策 | `docs/ADR-0003-Cocos编辑器创作入口收敛.md` |
 | Windows 正式发行、签名启动器与版本验证决策 | `docs/ADR-0002-Windows正式发行与服务端版本验证.md` |
 | R1 三场景、共享 UI、多舰、玩家状态与服务器边界 | `docs/ADR-0004-R1客户端重基线与服务器边界.md` |
-| UIRoot 模块 Prefab 拆分与动态页面生命周期 | `docs/ADR-0005-UI模块Prefab拆分与动态页面生命周期.md` |
+| UIRoot 模块 Prefab 拆分与动态页面生命周期（历史） | `docs/ADR-0005-UI模块Prefab拆分与动态页面生命周期.md` |
+| 三层核心 Prefab 与持久页面节点 | `docs/ADR-0006-三层核心Prefab与持久页面节点.md` |
 
 ---
 

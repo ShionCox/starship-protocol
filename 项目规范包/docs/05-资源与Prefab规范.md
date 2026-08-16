@@ -94,20 +94,21 @@ Prefab + 配置数据 + instantiate
 - 创作面板只在明确选中的 `ShipView` 内创建房间，在明确选中的 RoomView 内创建船员；禁止回退到 Canvas、场景根或跨舰搜索。
 - 初始样例实例由所属 ShipView 在 `BUILDABLE` 格和已完成地板支撑约束下查找合法位置，生成该飞船内唯一实例 ID；网格已满、墙体/预留冲突、支撑缺失或组件无效时必须在单次 Undo 中回滚。
 - 发现已有房间、地板、坐标、实例 ID 或占用校验失败时必须 fail-closed，不能跳过非法实例继续寻找空位。
-- 场景骨架只创建 Boot/Main/Battle 缺失的中文节点和组件；遇到重名或错误父级停止并回滚，不创建能源/船员等一次性玩法内容。
+- 场景页只显示三个固定动作：“一键创建/更新启动界面”“一键创建/更新主界面”“一键创建/更新战斗界面”。三个动作统一由 `create-or-update-scene` 消息串行执行，未来场景能力追加到对应分支，不新增按钮。
+- 场景骨架只创建 Boot/Main/Battle 缺失的中文节点和组件；遇到重名、错误父级、重复稳定 ID 或已有内容缺少布局组件时停止并返回冲突，不创建能源/船员等一次性玩法内容，也不覆盖已有手工变换和有效贴图。
 - 面板显示期间每 500ms 读取公开 Selection，隐藏/关闭时停止；执行创建前必须重新查询场景和选择，不能依赖缓存状态。禁止层级私有右键适配器、`cce.*` 和 DOM 注入。
 - 创作面板采用左侧领域分页、分类筛选、资源列表和右侧中文属性检查器；已接入领域的规则字段通过公开 Asset DB `save-asset` / `reimport-asset` 保存 CSV。稳定 ID、Prefab 引用和资源路径保持只读，保存前重新读取全部关联表，避免面板缓存覆盖外部修改。
 - 面板选择联动只在 UUID 变化时自动切页；实例字段只读，定义字段通过白名单表单编辑。新增 NPC、关卡等类型必须先按 [`19-Cocos创作工具类型接入规范.md`](./19-Cocos创作工具类型接入规范.md) 显式注册，不得自动暴露全部组件字段。
 - Prefab 保存颜色、组件、锚点与资源引用；CSV 保存版本、稳定 ID、分类、逻辑尺寸和规则数值，禁止写 Node 或世界坐标。
 - 船员分页消费 `crews.csv` 与 `crew-traits.csv`，支持 Prefab 绑定、场景实例化、Selection 识别、单次 Undo 和失败回滚；不创建第二个插件。
 - `CrewMember.prefab` 是船员模板，四职业 Prefab 保存各自 definitionId 与职业外观；Prefab 内实例 ID 必须为空，由飞船场景创作分配。巡逻路线属于士兵实例配置，不写回职业定义。
-- `PowerRoomRow.prefab` 是重复能源控制行模板；`PowerPanel` 按快照在持久容器中复用/实例化模板，房间拆除后移除对应行，不保留未知房间幽灵行。
+- `PowerRoomRow.prefab` 是重复能源控制行模板；`PowerPanel` 组件在 MainScreen 的持久容器中按快照复用/实例化模板，房间拆除后移除对应行，不保留未知房间幽灵行。
 - `ShipView.prefab` 内实例 ID 为空，包含船体外观层、网格根、房间容器、地板容器、船员层、特效层和施工预览容器；船体外观以持久 `Sprite + HullAppearance` 消费视觉 CSV，Main/Battle 的场景实例由插件生成唯一 `shipId` 并绑定已验证 HullDefinition。
 - 九张运行时 CSV 的 `TextAsset` 引用只保存于 MainScene/BattleScene“应用根”的唯一 `GameConfigCsvSource`。场景 ShipView 指向同场景来源，Room/Crew 从所属 ShipView 读取；ShipView/Room/Crew Prefab 不挂载该组件。独立 Prefab 由创作工具内存 DTO 预览，直接双击时显示最近一次保存的代表性外观。
-- `UIRoot.prefab` 是 Main/Battle 唯一公共 UI 源，包含分层根节点和持久嵌套模块；业务 Page 均为独立 Prefab。
-- `MainScreen.prefab` 保存主导航、顶栏、页面挂载点、`PowerPanel.prefab` 和 `CrewStatusPanel.prefab`；五个主页面只写入 `MainPageRouter` 的 Prefab 引用，页面挂载点保存时必须为空。
-- `BattleHUD.prefab`、`WorldContextMenu.prefab`、`SettingsPopup.prefab`、`DemolitionConfirmDialog.prefab` 和 `OfflineSettlementDialog.prefab` 可单独打开、移动和保存，再作为 UIRoot 的嵌套 Prefab 实例使用。嵌套模块不通过运行时脚本补节点。
-- 主页面的运行时生命周期固定为“校验 Prefab → instantiate → 挂载/绑定 → 停用并 destroy 旧页”；只销毁实例节点，不主动释放 `main` Bundle 中的 Prefab、贴图或其他资源。
+- `UIRoot.prefab` 是 Main/Battle 唯一公共 UI 源，包含主/战斗分层根、普通弹窗节点和唯一的 `MainScreen`/`BattleHUD` 核心实例。
+- 正式 UI Prefab 只保留五个：`UIRoot.prefab`、`MainScreen.prefab`、`BattleHUD.prefab`、`BuildOptionCard.prefab`、`PowerRoomRow.prefab`。MainScreen 保存五个持久页面、能源/船员面板与完整导航贴图；BuildOptionCard/PowerRoomRow 继续作为数据重复模板。
+- `WorldContextMenu`、设置、拆除确认和离线结算的节点与组件直接保存在 UIRoot 弹窗层，不再作为单用途 Prefab；PowerPanel、CrewStatusPanel、BuildPage 的内容直接保存在 MainScreen。
+- 主页面的运行时生命周期固定为“校验五个持久节点 → 只激活目标页面 → 绑定最新状态”；不 instantiate/destroy 页面，不主动释放 `main` Bundle 的 Prefab、贴图或其他资源。
 - 未进入里程碑的普通 NPC 和关卡仍不得添加空菜单、占位 Prefab 或万能实体配置。
 
 ### 领域创作入口映射
@@ -115,7 +116,7 @@ Prefab + 配置数据 + instantiate
 | 内容 | 规则源 | 表现源 | 主要创作入口 | 层级入口 |
 | --- | --- | --- | --- | --- |
 | 房间/建筑 | `assets/config/csv/rooms.csv` | 房间 Prefab | “配置表”分页 + Inspector | 创作面板创建已发现实例 |
-| 场景结构 | Boot/Main/Battle Scene 层级 | Scene + UIRoot Prefab | 创作面板初始化中文骨架 | 不生成一次性玩法内容 |
+| 场景结构 | Boot/Main/Battle Scene 层级 | Scene + UIRoot Prefab | 场景页三个一键创建/更新入口 | 不生成一次性玩法内容 |
 | 船体/飞船 | `assets/config/csv/hulls.csv`（含 `cellMask`） | 船体外观 + ShipView Prefab | “配置表/船体与飞船”分页 | 在明确挂载点创建唯一 shipId |
 | 船员 | `assets/config/csv/crews.csv` + `crew-traits.csv` | Crew Prefab | 创作面板“配置表/船员”分页 | 发现、编辑并创建 CrewView 实例 |
 | 地板/连接器 | `floors.csv` + `connector-ports.csv` | Floor/楼梯/电梯 Prefab | “配置表/建造”分页 | ShipView 地板与施工预览容器 |

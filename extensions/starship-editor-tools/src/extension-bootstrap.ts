@@ -33,14 +33,7 @@ const CONTEXT_MUTATING_METHODS = new Set([
   'createRoomInstance',
   'createCrewInstance',
   'createShipInstance',
-  'initializeSceneSkeleton',
-  'createFoundationPrefabs',
-  'rebuildP8StarterShip',
-  'mountSharedUi',
-  'wireSceneFoundation',
-  'previewPage',
-  'openPagePrefab',
-  'configureP8VoxelDemoScene',
+  'createOrUpdateScene',
 ]);
 
 async function enqueueAuthoringOperation<T>(operation: () => Promise<T>): Promise<T> {

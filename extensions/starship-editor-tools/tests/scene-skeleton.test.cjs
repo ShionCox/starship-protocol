@@ -80,7 +80,7 @@ test('主场景骨架只创建持久中文节点并绑定镜头引用', async ()
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === 'cameraComponent' && call[3]?.type === 'cc.Camera'), true);
   assert.equal(scene.calls.some((call) => call[0] === 'property' && call[2] === '_layer' && call[3] === 33_554_432), true);
   assert.equal(scene.calls.filter((call) => call[0] === 'property' && call[2] === '_layer' && call[3] === 33_554_432).length, 3);
-  assert.equal(scene.calls.some((call) => call[0] === 'execute' && call[2] === 'applyEditorCameraDefaults'), true);
+  assert.equal(scene.calls.some((call) => call[0] === 'execute' && call[2] === 'applyEditorCameraDefaults'), false);
   const canvas = scene.root.children.find((node) => node.name === '画布');
   assert.equal(canvas.children.some((node) => node.name === '世界根'), true);
   assert.equal(scene.root.children.some((node) => node.name === '世界根'), false);
@@ -98,5 +98,5 @@ test('战斗场景骨架创建双方独立挂载点和战斗分层', async () =>
   const canvas = scene.root.children.find((node) => node.name === '画布');
   assert.equal(canvas.children.some((node) => node.name === '世界根'), true);
   assert.equal(scene.calls.some((call) => call[0] === 'component' && call[1] === 'BattleSceneBootstrap'), true);
-  assert.equal(scene.calls.some((call) => call[0] === 'execute' && call[2] === 'applyEditorCameraDefaults'), true);
+  assert.equal(scene.calls.some((call) => call[0] === 'execute' && call[2] === 'applyEditorCameraDefaults'), false);
 });

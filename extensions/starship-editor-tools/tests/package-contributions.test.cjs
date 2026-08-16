@@ -22,10 +22,7 @@ test('扩展清单保留资源菜单，并只提供公开创作面板入口', ()
   assert.ok(packageJson.contributions?.messages?.['create-crew-instance']);
   assert.ok(packageJson.contributions?.messages?.['save-crew-csv-draft']);
   assert.ok(packageJson.contributions?.messages?.['save-hull-csv-draft']);
-  assert.ok(packageJson.contributions?.messages?.['create-foundation-prefabs']);
-  assert.ok(packageJson.contributions?.messages?.['rebuild-p8-starter-ship']);
-  assert.ok(packageJson.contributions?.messages?.['mount-shared-ui']);
-  assert.ok(packageJson.contributions?.messages?.['wire-scene-foundation']);
+  assert.deepEqual(packageJson.contributions?.messages?.['create-or-update-scene']?.methods, ['createOrUpdateScene']);
   assert.ok(packageJson.contributions?.messages?.['bind-first-pss-room-appearances']);
   assert.ok(packageJson.contributions?.messages?.['bind-first-pss-crew-appearances']);
   assert.ok(packageJson.contributions?.messages?.['import-and-bind-first-pss-hull-appearances']);
@@ -33,7 +30,7 @@ test('扩展清单保留资源菜单，并只提供公开创作面板入口', ()
   assert.ok(packageJson.contributions?.messages?.['import-csv-config-bundle']);
   assert.equal(packageJson.contributions?.messages?.['save-csv-config-table'], undefined);
   assert.equal(packageJson.contributions?.messages?.['delete-legacy-json-configs'], undefined);
-  for (const message of ['get-crew-csv-drafts', 'get-hull-csv-drafts', 'save-csv-config-bundle', 'validate-pss-manifest', 'validate-first-pss-manifest', 'import-pss-manifest']) {
+  for (const message of ['get-crew-csv-drafts', 'get-hull-csv-drafts', 'save-csv-config-bundle', 'validate-pss-manifest', 'validate-first-pss-manifest', 'import-pss-manifest', 'initialize-scene-skeleton', 'create-foundation-prefabs', 'mount-shared-ui', 'wire-scene-foundation', 'configure-p8-voxel-demo-scene', 'migrate-ui-prefabs', 'rebuild-p8-starter-ship', 'preview-page', 'open-page-prefab']) {
     assert.equal(packageJson.contributions?.messages?.[message], undefined, `旧消息不得重新注册：${message}`);
   }
   const registeredMethods = Object.values(packageJson.contributions?.messages ?? {}).flatMap((entry) => entry.methods ?? []);

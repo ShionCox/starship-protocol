@@ -27,6 +27,44 @@ const CSV_CONFIG_TABLES = [
 ] as const;
 type CsvConfigTableName = (typeof CSV_CONFIG_TABLES)[number];
 
+type NoticeKind = 'success' | 'log' | 'warn' | 'error';
+
+interface NativeNoticeApi {
+  addNotice?: (options: {
+    readonly title: string;
+    readonly message?: string;
+    readonly type?: NoticeKind;
+    readonly source?: string;
+    readonly timeout?: number;
+  }) => number;
+  removeNotice?: (id: number) => void;
+}
+
+interface NoticeSpec {
+  readonly kind: NoticeKind;
+  readonly title: string;
+  readonly message: string;
+  readonly scope?: string;
+}
+
+const NOTICE_TIMEOUTS: Readonly<Record<NoticeKind, number>> = {
+  success: 3000,
+  log: 4000,
+  warn: 6000,
+  error: 8000,
+};
+
+function getNativeNoticeApi(): NativeNoticeApi | undefined {
+  const editor = (globalThis as { Editor?: { Task?: NativeNoticeApi } }).Editor;
+  return editor?.Task;
+}
+
+function summarizeNotice(message: string, limit = 220): string {
+  const normalized = message.trim().replace(/\s+/g, ' ');
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, Math.max(0, limit - 1))}…`;
+}
+
 const ROOM_CATEGORIES = [
   ['ALL', '全部'],
   ['ENERGY', '能源'],
@@ -65,22 +103,18 @@ const template = `
       <section id="pageScene" class="page">
         <div class="page-heading"><div><h2>场景</h2></div><span id="sceneBadge" class="badge neutral">读取中</span></div>
         <section class="panel-card scene-card">
-          <div class="info-grid">
-            <div class="info-item"><span class="label">当前选择</span><span id="selection" class="value">正在读取…</span></div>
-            <div class="info-item"><span class="label">房间容器</span><span id="target" class="value">正在读取…</span></div>
-          </div>
           <div id="selectionDirtyBanner" class="warning" hidden></div>
-          <div class="scene-action-groups">
-            <section class="scene-action-group"><h3>场景骨架</h3><div class="actions"><select id="sceneKind"><option value="BOOT">启动场景</option><option value="MAIN" selected>主场景</option><option value="BATTLE">战斗场景</option></select><ui-button id="initialize" class="blue primary-action">补齐中文场景骨架</ui-button><ui-button id="sceneRefresh">重新校验</ui-button></div></section>
-            <section class="scene-action-group"><h3>共享基础</h3><div class="actions"><ui-button id="createFoundation">校验并升级共享基础</ui-button><ui-button id="mountSharedUi">挂载共享界面</ui-button><ui-button id="wireFoundation">连接场景引用</ui-button><ui-button id="cancelAuthoringPreview">取消当前预览</ui-button></div></section>
-            <section class="scene-action-group"><h3>P8 演示</h3><div class="actions"><ui-button id="rebuildP8StarterShip" class="blue">全新重建 P8.3 资源与标准新手船</ui-button><ui-button id="configureP8">装配 P8 双层演示</ui-button></div></section>
-            <section class="scene-action-group"><h3>页面预览</h3><div class="actions"><select id="pagePreviewKind"><option value="MAIN_MENU">主菜单</option><option value="GALAXY_MAP">星图</option><option value="SHIP">飞船</option><option value="BUILD">建造</option><option value="CREW">船员</option></select><ui-button id="previewPage">预览页面</ui-button><ui-button id="openPagePrefab">打开页面 Prefab</ui-button></div></section>
+          <div class="scene-action-groups scene-action-groups--single">
+            <section class="scene-action-group scene-action-group--primary">
+              <h3>一键创建 / 更新</h3>
+              <p class="muted-note">自动打开目标 Scene，补齐缺失结构并连接最新引用；已有手工布局和有效自定义贴图会保留。</p>
+              <div class="actions">
+                <ui-button id="createOrUpdateBoot" class="blue primary-action">一键创建/更新启动界面</ui-button>
+                <ui-button id="createOrUpdateMain" class="blue primary-action">一键创建/更新主界面</ui-button>
+                <ui-button id="createOrUpdateBattle" class="blue primary-action">一键创建/更新战斗界面</ui-button>
+              </div>
+            </section>
           </div>
-          <section id="sceneInspector" class="scene-inspector" hidden>
-            <div class="inspector-heading"><div><h3 id="sceneSelectionTitle">选择属性</h3></div><span id="sceneSelectionBadge" class="badge neutral">只读</span></div>
-            <div class="asset-path"><span id="sceneNodePath">—</span><span id="sceneSemanticRole">—</span></div>
-            <div id="sceneBaseInfo" class="info-grid"></div>
-          </section>
         </section>
       </section>
 
@@ -144,7 +178,7 @@ const style = `
 .brand-lockup { min-width:0; flex:1 1 auto; gap:10px; }.brand-lockup > div { min-width:0; }.brand-mark { display:grid; place-items:center; width:29px; height:29px; border-radius:5px; background:#2d9cc8; color:#fff; font-size:10px; font-weight:700; letter-spacing:.06em; }.brand-lockup h1 { margin:0; overflow:hidden; color:var(--color-normal-contrast); font-size:17px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }.top-actions { flex:0 0 auto; gap:9px; }.sync { display:inline-flex; align-items:center; gap:5px; color:var(--color-normal-contrast-weaker); font-size:11px; }.sync i { width:6px; height:6px; border-radius:50%; background:#6cc5a0; box-shadow:0 0 0 3px rgba(108,197,160,.14); }
 .workbench { display:grid; grid-template-columns:122px minmax(0,1fr); height:calc(100% - 62px); min-height:0; }.sidebar { display:flex; flex-direction:column; gap:3px; min-height:0; padding:12px 8px; border-right:1px solid var(--color-normal-border); background:rgba(0,0,0,.1); }.nav-item { display:flex; align-items:center; gap:7px; width:100%; min-width:0; min-height:35px; padding:0 6px; border:0; border-radius:4px; background:transparent; color:var(--color-normal-contrast-weaker); text-align:left; cursor:pointer; }.nav-item:hover { background:rgba(255,255,255,.06); color:var(--color-normal-contrast); }.nav-item.active { background:rgba(45,156,200,.18); color:#83d7f4; }.nav-item > span:not(.nav-icon) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.nav-icon { display:grid; flex:0 0 auto; place-items:center; width:21px; height:21px; border:1px solid currentColor; border-radius:4px; font-size:10px; }.nav-item em { margin-left:auto; color:var(--color-normal-contrast-weaker); font-size:10px; font-style:normal; }.nav-divider { height:1px; margin:12px 5px; background:var(--color-normal-border); }
 .content { min-width:0; min-height:0; overflow-y:auto; padding:16px; scrollbar-width:thin; }.content::-webkit-scrollbar { width:8px; }.content::-webkit-scrollbar-thumb { border-radius:8px; background:var(--color-normal-fill-emphasis,rgba(255,255,255,.18)); }.page { max-width:1120px; margin:0 auto; }.page-heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:10px 18px; margin-bottom:18px; }.page-heading > div:first-child { min-width:0; flex:1 1 180px; }.page-heading h2 { margin:2px 0 4px; color:var(--color-normal-contrast); font-size:22px; font-weight:600; }.heading-actions { flex:0 1 auto; flex-wrap:wrap; gap:8px; max-width:100%; }.panel-card { border:1px solid var(--color-normal-border); border-radius:6px; background:var(--color-normal-fill-emphasis,rgba(255,255,255,.025)); }.scene-card,.validation-card { padding:16px; }.info-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:10px; }.info-item { min-width:0; padding:12px; border-radius:4px; background:rgba(0,0,0,.14); }.label { display:block; margin-bottom:5px; color:var(--color-normal-contrast-weaker); font-size:11px; }.value { display:block; overflow:hidden; color:var(--color-normal-contrast); text-overflow:ellipsis; white-space:nowrap; }.value.muted { color:var(--color-normal-contrast-weaker); }.actions,.inspector-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }.primary-action { min-width:138px; }
-.badge,.count { flex:0 0 auto; border-radius:999px; font-size:11px; white-space:nowrap; }.badge { padding:4px 8px; border:1px solid var(--color-normal-border); }.badge.ok { color:#8fe0b1; border-color:rgba(105,202,153,.4); background:rgba(105,202,153,.1); }.badge.warn { color:#f0cd78; border-color:rgba(240,205,120,.35); background:rgba(240,205,120,.08); }.badge.neutral,.count { color:var(--color-normal-contrast-weaker); }.toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; margin-bottom:12px; }.search { box-sizing:border-box; width:min(310px,100%); min-width:0; flex:1 1 180px; height:30px; padding:5px 9px; color:var(--color-normal-contrast); background:var(--color-normal-fill); border:1px solid var(--color-normal-border); border-radius:4px; outline:none; }.search:focus,input:focus,select:focus { border-color:#3ea9d1; }.category-tabs { display:flex; min-width:0; flex:1 1 220px; flex-wrap:wrap; gap:4px; }.category-tab { padding:5px 9px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--color-normal-contrast-weaker); cursor:pointer; }.category-tab:hover { background:rgba(255,255,255,.06); color:var(--color-normal-contrast); }.category-tab.active { border-color:rgba(59,169,210,.45); background:rgba(45,156,200,.16); color:#8bdaf3; }.room-workspace { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:12px; align-items:start; }.asset-list-card { min-width:0; min-height:310px; padding:12px 14px; }.list-heading { justify-content:space-between; padding-bottom:10px; color:var(--color-normal-contrast); font-weight:600; }.room { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 10px; padding:11px 4px; border-top:1px solid var(--color-normal-border); cursor:pointer; }.room:hover,.room.selected { background:rgba(255,255,255,.04); }.room.selected { box-shadow:inset 2px 0 #39a9d1; }.room-main { min-width:0; flex:1 1 120px; }.room-name { display:block; overflow:hidden; color:var(--color-normal-contrast); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }.room-meta { display:flex; flex-wrap:wrap; gap:7px; margin-top:3px; color:var(--color-normal-contrast-weaker); font-size:11px; }.room-category { color:#8eb9e8; }.room-id { overflow:hidden; max-width:160px; text-overflow:ellipsis; white-space:nowrap; }.room-actions { display:flex; flex:0 0 auto; gap:5px; }.room ui-button { min-width:54px; }.inspector { min-width:0; padding:15px; }.inspector-heading { justify-content:space-between; align-items:flex-start; }.inspector-heading h3 { margin:2px 0 0; color:var(--color-normal-contrast); font-size:16px; }.asset-path { display:flex; flex-direction:column; gap:2px; min-width:0; margin:13px 0; padding:8px 9px; border-radius:4px; background:rgba(0,0,0,.14); }.asset-path span:first-child { color:#8bdaf3; font-weight:600; }.asset-path span:last-child { overflow:hidden; color:var(--color-normal-contrast-weaker); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }.form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr)); gap:10px; }.form-grid label { display:flex; min-width:0; flex-direction:column; gap:5px; color:var(--color-normal-contrast-weaker); font-size:11px; }.form-grid input,.form-grid select { box-sizing:border-box; width:100%; height:29px; padding:4px 7px; color:var(--color-normal-contrast); background:var(--color-normal-fill); border:1px solid var(--color-normal-border); border-radius:3px; }.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:250px; padding:25px; text-align:center; }.empty-state h3 { margin:10px 0 5px; color:var(--color-normal-contrast); font-size:16px; }.validation-summary { color:var(--color-normal-contrast); font-weight:600; }.validation-list { margin-top:12px; }.validation-item { padding:9px 10px; border-top:1px solid var(--color-normal-border); color:#f0cd78; font-size:12px; white-space:pre-wrap; }.validation-ok { color:#8fe0b1; }.warning { margin-top:10px; padding:9px 10px; border-left:2px solid #e8c46a; background:rgba(232,196,106,.08); color:#e8c46a; white-space:pre-wrap; }.empty { padding:28px 5px; color:var(--color-normal-contrast-weaker); text-align:center; }.hidden { display:none !important; }#status { display:none; margin-top:12px; padding:9px 10px; border-radius:4px; white-space:pre-wrap; }.content > #status.visible { display:block; }.content > #status.info { color:var(--color-normal-contrast-weaker); background:rgba(255,255,255,.05); }.content > #status.ok { color:#8fe0b1; background:rgba(105,202,153,.1); }.content > #status.error { color:#ff9696; background:rgba(255,110,110,.1); }
+.badge,.count { flex:0 0 auto; border-radius:999px; font-size:11px; white-space:nowrap; }.badge { padding:4px 8px; border:1px solid var(--color-normal-border); }.badge.ok { color:#8fe0b1; border-color:rgba(105,202,153,.4); background:rgba(105,202,153,.1); }.badge.warn { color:#f0cd78; border-color:rgba(240,205,120,.35); background:rgba(240,205,120,.08); }.badge.neutral,.count { color:var(--color-normal-contrast-weaker); }.toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; margin-bottom:12px; }.search { box-sizing:border-box; width:min(310px,100%); min-width:0; flex:1 1 180px; height:30px; padding:5px 9px; color:var(--color-normal-contrast); background:var(--color-normal-fill); border:1px solid var(--color-normal-border); border-radius:4px; outline:none; }.search:focus,input:focus,select:focus { border-color:#3ea9d1; }.category-tabs { display:flex; min-width:0; flex:1 1 220px; flex-wrap:wrap; gap:4px; }.category-tab { padding:5px 9px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--color-normal-contrast-weaker); cursor:pointer; }.category-tab:hover { background:rgba(255,255,255,.06); color:var(--color-normal-contrast); }.category-tab.active { border-color:rgba(59,169,210,.45); background:rgba(45,156,200,.16); color:#8bdaf3; }.room-workspace { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:12px; align-items:start; }.asset-list-card { min-width:0; min-height:310px; padding:12px 14px; }.list-heading { justify-content:space-between; padding-bottom:10px; color:var(--color-normal-contrast); font-weight:600; }.room { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 10px; padding:11px 4px; border-top:1px solid var(--color-normal-border); cursor:pointer; }.room:hover,.room.selected { background:rgba(255,255,255,.04); }.room.selected { box-shadow:inset 2px 0 #39a9d1; }.room-main { min-width:0; flex:1 1 120px; }.room-name { display:block; overflow:hidden; color:var(--color-normal-contrast); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }.room-meta { display:flex; flex-wrap:wrap; gap:7px; margin-top:3px; color:var(--color-normal-contrast-weaker); font-size:11px; }.room-category { color:#8eb9e8; }.room-id { overflow:hidden; max-width:160px; text-overflow:ellipsis; white-space:nowrap; }.room-actions { display:flex; flex:0 0 auto; gap:5px; }.room ui-button { min-width:54px; }.inspector { min-width:0; padding:15px; }.inspector-heading { justify-content:space-between; align-items:flex-start; }.inspector-heading h3 { margin:2px 0 0; color:var(--color-normal-contrast); font-size:16px; }.asset-path { display:flex; flex-direction:column; gap:2px; min-width:0; margin:13px 0; padding:8px 9px; border-radius:4px; background:rgba(0,0,0,.14); }.asset-path span:first-child { color:#8bdaf3; font-weight:600; }.asset-path span:last-child { overflow:hidden; color:var(--color-normal-contrast-weaker); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }.form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr)); gap:10px; }.form-grid label { display:flex; min-width:0; flex-direction:column; gap:5px; color:var(--color-normal-contrast-weaker); font-size:11px; }.form-grid input,.form-grid select { box-sizing:border-box; width:100%; height:29px; padding:4px 7px; color:var(--color-normal-contrast); background:var(--color-normal-fill); border:1px solid var(--color-normal-border); border-radius:3px; }.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:250px; padding:25px; text-align:center; }.empty-state h3 { margin:10px 0 5px; color:var(--color-normal-contrast); font-size:16px; }.validation-summary { color:var(--color-normal-contrast); font-weight:600; }.validation-list { margin-top:12px; }.validation-item { padding:9px 10px; border-top:1px solid var(--color-normal-border); color:#f0cd78; font-size:12px; white-space:pre-wrap; }.validation-ok { color:#8fe0b1; }.warning { margin-top:10px; padding:9px 10px; border-left:2px solid #e8c46a; background:rgba(232,196,106,.08); color:#e8c46a; white-space:pre-wrap; }.empty { padding:28px 5px; color:var(--color-normal-contrast-weaker); text-align:center; }.hidden { display:none !important; }#status { display:none; margin-top:12px; padding:9px 10px; border-radius:4px; white-space:pre-wrap; }.content > #status.visible { display:block; }.content > #status.info { color:var(--color-normal-contrast-weaker); background:rgba(255,255,255,.05); }.content > #status.warn { color:#f0cd78; background:rgba(240,205,120,.1); }.content > #status.error { color:#ff9696; background:rgba(255,110,110,.1); }
 .inspector { padding:12px; }
 .inspector-heading h3 { font-size:15px; }
 .asset-path { margin:9px 0 10px; padding:7px 8px; }
@@ -171,6 +205,7 @@ const style = `
 /* 统一场景操作组和窄停靠宽度，保证 420px 仍可完成主要操作。 */
 .actions > select,.actions > ui-button { min-width:0; flex:1 1 150px; }
 .scene-action-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:15px; }
+.scene-action-groups--single { grid-template-columns:1fr; }
 .scene-action-group { min-width:0; padding:11px; border:1px solid var(--color-normal-border); border-radius:5px; background:rgba(0,0,0,.08); }
 .scene-action-group h3 { margin:0; color:var(--color-normal-contrast); font-size:12px; font-weight:600; }
 .scene-action-group .actions { margin-top:9px; }
@@ -188,8 +223,8 @@ module.exports = Editor.Panel.define({
   template,
   style,
   $: {
-    selection: '#selection', target: '#target', sceneBadge: '#sceneBadge', roomCount: '#roomCount',
-     navWarningCount: '#navWarningCount', sync: '#sync', sceneKind: '#sceneKind', initialize: '#initialize', createFoundation: '#createFoundation', rebuildP8StarterShip: '#rebuildP8StarterShip', configureP8: '#configureP8', mountSharedUi: '#mountSharedUi', wireFoundation: '#wireFoundation', cancelAuthoringPreview: '#cancelAuthoringPreview', sceneRefresh: '#sceneRefresh', pagePreviewKind: '#pagePreviewKind', previewPage: '#previewPage', openPagePrefab: '#openPagePrefab',
+    sceneBadge: '#sceneBadge', roomCount: '#roomCount',
+     navWarningCount: '#navWarningCount', sync: '#sync', createOrUpdateBoot: '#createOrUpdateBoot', createOrUpdateMain: '#createOrUpdateMain', createOrUpdateBattle: '#createOrUpdateBattle',
     refresh: '#refresh', list: '#list', status: '#status', roomSearch: '#roomSearch', roomCategories: '#roomCategories',
     roomInspector: '#roomInspector', roomEmpty: '#roomEmpty', roomInstanceInfo: '#roomInstanceInfo', editTitle: '#editTitle', editState: '#editState', editId: '#editId', editPath: '#editPath',
     editDisplayName: '#editDisplayName', editCategory: '#editCategory', editWidth: '#editWidth', editHeight: '#editHeight', editMaxLevel: '#editMaxLevel', newRoom: '#newRoom',
@@ -200,7 +235,7 @@ module.exports = Editor.Panel.define({
     pageScene: '#pageScene', pageHulls: '#pageHulls', pageRooms: '#pageRooms', pageCrew: '#pageCrew', pageConfig: '#pageConfig', pagePss: '#pagePss', pageValidation: '#pageValidation',
     hullCount: '#hullCount', hullList: '#hullList', hullId: '#hullId', hullDisplayName: '#hullDisplayName', hullLevel: '#hullLevel', hullGridWidth: '#hullGridWidth', hullGridHeight: '#hullGridHeight', hullMaxCrew: '#hullMaxCrew', hullMaxRooms: '#hullMaxRooms', hullVisualId: '#hullVisualId', hullCellMask: '#hullCellMask', newHull: '#newHull', cancelHull: '#cancelHull', createHull: '#createHull', saveHull: '#saveHull', createShip: '#createShip',
     crewCount: '#crewCount', crewList: '#crewList', crewInspector: '#crewInspector', crewEmpty: '#crewEmpty', crewInstanceInfo: '#crewInstanceInfo', crewInstanceNameMode: '#crewInstanceNameMode', crewInstanceCallSign: '#crewInstanceCallSign', crewEditTitle: '#crewEditTitle', crewEditState: '#crewEditState', crewEditId: '#crewEditId', crewEditPath: '#crewEditPath', crewEditDisplayName: '#crewEditDisplayName', crewEditRole: '#crewEditRole', crewEditRarity: '#crewEditRarity', crewEditAppearanceId: '#crewEditAppearanceId', crewEditTraitIds: '#crewEditTraitIds', crewEditMaxHp: '#crewEditMaxHp', crewEditMoveTicks: '#crewEditMoveTicks', crewEditRepairHp: '#crewEditRepairHp', newCrew: '#newCrew', cancelCrew: '#cancelCrew', saveCrew: '#saveCrew', createSelectedCrew: '#createSelectedCrew', openSelectedCrewPrefab: '#openSelectedCrewPrefab',
-    sceneInspector: '#sceneInspector', sceneSelectionTitle: '#sceneSelectionTitle', sceneSelectionBadge: '#sceneSelectionBadge', sceneNodePath: '#sceneNodePath', sceneSemanticRole: '#sceneSemanticRole', sceneBaseInfo: '#sceneBaseInfo', selectionDirtyBanner: '#selectionDirtyBanner',
+    selectionDirtyBanner: '#selectionDirtyBanner',
     pssSearch: '#pssSearch', pssKind: '#pssKind', pssLanguage: '#pssLanguage', pssRefresh: '#pssRefresh', pssBindRooms: '#pssBindRooms', pssBindCrews: '#pssBindCrews', pssBindHulls: '#pssBindHulls', pssStatus: '#pssStatus', pssList: '#pssList', pssPrevious: '#pssPrevious', pssNext: '#pssNext', pssPage: '#pssPage', pssCount: '#pssCount',
     csvTableName: '#csvTableName', csvEditor: '#csvEditor', csvReload: '#csvReload', csvImport: '#csvImport', csvStatus: '#csvStatus', csvState: '#csvState',
   },
@@ -214,17 +249,13 @@ module.exports = Editor.Panel.define({
       if (value !== undefined && value !== null) return value as T;
       throw new Error(`创作面板缺少必需节点：${key}`);
     };
-    const selection = el<HTMLElement>('selection');
-    const target = el<HTMLElement>('target');
     const sceneBadge = el<HTMLElement>('sceneBadge');
     const roomCount = el<HTMLElement>('roomCount');
     const navWarningCount = el<HTMLElement>('navWarningCount');
     const sync = el<HTMLElement>('sync');
-    const initialize = el<HTMLElement>('initialize');
-    const sceneRefresh = el<HTMLElement>('sceneRefresh');
-    const pagePreviewKind = el<HTMLSelectElement>('pagePreviewKind');
-    const previewPage = el<HTMLElement>('previewPage');
-    const openPagePrefab = el<HTMLElement>('openPagePrefab');
+    const createOrUpdateBoot = el<HTMLElement>('createOrUpdateBoot');
+    const createOrUpdateMain = el<HTMLElement>('createOrUpdateMain');
+    const createOrUpdateBattle = el<HTMLElement>('createOrUpdateBattle');
     const refresh = el<HTMLElement>('refresh');
     const list = el<HTMLElement>('list');
     const status = el<HTMLElement>('status');
@@ -251,12 +282,6 @@ module.exports = Editor.Panel.define({
     const cancelRoomInstance = el<HTMLElement>('cancelRoomInstance');
     const validationSummary = el<HTMLElement>('validationSummary');
     const validationList = el<HTMLElement>('validationList');
-    const sceneInspector = el<HTMLElement>('sceneInspector');
-    const sceneSelectionTitle = el<HTMLElement>('sceneSelectionTitle');
-    const sceneSelectionBadge = el<HTMLElement>('sceneSelectionBadge');
-    const sceneNodePath = el<HTMLElement>('sceneNodePath');
-    const sceneSemanticRole = el<HTMLElement>('sceneSemanticRole');
-    const sceneBaseInfo = el<HTMLElement>('sceneBaseInfo');
     const selectionDirtyBanner = el<HTMLElement>('selectionDirtyBanner');
     const crewCount = el<HTMLElement>('crewCount');
     const hullCount = el<HTMLElement>('hullCount');
@@ -340,9 +365,57 @@ module.exports = Editor.Panel.define({
     let pssPageNumber = 1;
     let csvTables: Readonly<Record<CsvConfigTableName, string>> | undefined;
 
-    const showStatus = (message: string, ok?: boolean): void => {
-      status.className = `visible ${ok === undefined ? 'info' : ok ? 'ok' : 'error'}`;
+    const noticeIds = new Map<string, { readonly signature: string; readonly id?: number; readonly timestamp: number }>();
+    let inlineDetailScope = 'global';
+    let inlineDetailKind: 'info' | 'warn' | 'error' | undefined;
+
+    const clearInlineDetail = (scope?: string): void => {
+      if (scope !== undefined && inlineDetailKind !== undefined && inlineDetailKind !== 'info' && inlineDetailScope !== scope) return;
+      status.className = '';
+      status.textContent = '';
+      inlineDetailKind = undefined;
+    };
+
+    const setInlineDetail = (message: string, kind: 'info' | 'warn' | 'error', scope = 'global'): void => {
+      status.className = `visible ${kind}`;
       status.textContent = message;
+      inlineDetailScope = scope;
+      inlineDetailKind = kind;
+    };
+
+    const reportNotice = ({ kind, title, message, scope = 'global' }: NoticeSpec): void => {
+      const fullMessage = message.trim();
+      const signature = `${kind}|${title}|${fullMessage}`;
+      const now = Date.now();
+      const previous = noticeIds.get(scope);
+      if (previous?.signature === signature && now - previous.timestamp < 3000) {
+        if (kind === 'warn' || kind === 'error') setInlineDetail(fullMessage, kind, scope);
+        return;
+      }
+      if (previous?.id !== undefined) getNativeNoticeApi()?.removeNotice?.(previous.id);
+      const api = getNativeNoticeApi();
+      const id = api?.addNotice?.({
+        title,
+        message: summarizeNotice(fullMessage),
+        type: kind,
+        source: '星舰创作工具',
+        timeout: NOTICE_TIMEOUTS[kind],
+      });
+      noticeIds.set(scope, { signature, id, timestamp: now });
+      if (kind === 'warn' || kind === 'error') setInlineDetail(fullMessage, kind, scope);
+      else clearInlineDetail(scope);
+    };
+
+    const reportResult = (
+      scope: string,
+      title: string,
+      result: { readonly ok: boolean; readonly message: string; readonly cancelled?: boolean },
+    ): void => {
+      if (result.cancelled === true) {
+        clearInlineDetail(scope);
+        return;
+      }
+      reportNotice({ kind: result.ok ? 'success' : 'error', title, message: result.message, scope });
     };
 
     const dispatchConfirm = (target: HTMLElement): void => {
@@ -376,7 +449,7 @@ module.exports = Editor.Panel.define({
         blockedSelectionUuid = '';
         blockedSelectionName = '';
         renderSelectionBanner();
-        showStatus('已放弃未保存草稿，正在切换选择。', true);
+        reportNotice({ kind: 'success', title: '已放弃草稿', message: '已放弃未保存草稿，正在切换选择。', scope: 'draft-selection' });
         void refreshState(true);
       });
       selectionDirtyBanner.append(text, save, discard);
@@ -395,7 +468,7 @@ module.exports = Editor.Panel.define({
     const hasAnyDraftDirty = (): boolean => roomDraftSession.dirty || roomInstanceDirty || crewDraftSession.dirty || hullDraftSession.dirty;
     const canLeaveAnyDraft = (): boolean => {
       if (!hasAnyDraftDirty()) return true;
-      showStatus('当前领域存在未保存修改，请先点击“保存”或“取消”', false);
+      reportNotice({ kind: 'warn', title: '存在未保存修改', message: '当前领域存在未保存修改，请先点击“保存”或“取消”。', scope: 'draft-navigation' });
       return false;
     };
 
@@ -458,7 +531,9 @@ module.exports = Editor.Panel.define({
       } catch (cause) {
         pssCount.textContent = '读取失败';
         pssList.replaceChildren();
-        pssStatus.textContent = `无法读取 PSS 索引：${cause instanceof Error ? cause.message : String(cause)}`;
+        const message = `无法读取 PSS 索引：${cause instanceof Error ? cause.message : String(cause)}`;
+        pssStatus.textContent = message;
+        reportNotice({ kind: 'error', title: '读取 PSS 索引失败', message, scope: 'pss-index-load' });
       }
     };
 
@@ -484,7 +559,9 @@ module.exports = Editor.Panel.define({
       } catch (cause) {
         csvTables = undefined;
         renderCsvTable();
-        csvStatus.textContent = `读取配置表失败：${cause instanceof Error ? cause.message : String(cause)}`;
+        const message = `读取配置表失败：${cause instanceof Error ? cause.message : String(cause)}`;
+        csvStatus.textContent = message;
+        reportNotice({ kind: 'error', title: '读取配置表失败', message, scope: 'csv-config-load' });
       }
     };
 
@@ -525,7 +602,7 @@ module.exports = Editor.Panel.define({
       try {
         connectorPorts = parseConnectorPortsEditorText(editConnectorPorts.value, baseline.id);
       } catch (cause) {
-        showStatus(cause instanceof Error ? cause.message : String(cause), false);
+        reportNotice({ kind: 'error', title: '房间字段校验失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'room-form' });
         return null;
       }
       return {
@@ -603,8 +680,8 @@ module.exports = Editor.Panel.define({
           }
         }, async () => {
           if (entry === undefined) return;
-          showStatus(`正在创建 ${draft.displayName}…`);
-          try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-room-instance', entry) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); }
+          setInlineDetail(`正在创建 ${draft.displayName}…`, 'info');
+          try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-room-instance', entry) as { ok: boolean; message: string }; reportResult('room-instance-create', '房间实例创建结果', result); await refreshState(true); } catch (cause) { reportNotice({ kind: 'error', title: '房间实例创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'room-instance-create' }); }
         });
       }
       renderInspector();
@@ -678,8 +755,8 @@ module.exports = Editor.Panel.define({
         crewDraftSession.dirty = false;
         renderCrewList(); renderCrewInspector();
       }, async () => {
-        showStatus(`正在创建 ${entry.displayName} 实例…`);
-        try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-instance', { entry, nameMode: crewInstanceNameMode.value, callSign: crewInstanceCallSign.value.trim() }) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); }
+        setInlineDetail(`正在创建 ${entry.displayName} 实例…`, 'info');
+          try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-instance', { entry, nameMode: crewInstanceNameMode.value, callSign: crewInstanceCallSign.value.trim() }) as { ok: boolean; message: string }; reportResult('crew-instance-create', '船员实例创建结果', result); await refreshState(true); } catch (cause) { reportNotice({ kind: 'error', title: '船员实例创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'crew-instance-create' }); }
       });
       renderCrewInspector();
     };
@@ -727,31 +804,13 @@ module.exports = Editor.Panel.define({
       if (hullEntries.length === 0) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '暂无船体定义'; hullList.append(empty); }
     };
 
-    const renderSceneInspector = (selectionValue: AuthoringSelection): void => {
-      sceneInspector.hidden = selectionValue.kind === 'room-instance' || selectionValue.kind === 'crew-instance' || selectionValue.kind === 'ship-instance';
-      sceneBaseInfo.replaceChildren();
-      sceneNodePath.textContent = selectionValue.path ?? '—';
-      sceneSemanticRole.textContent = selectionValue.kind === 'semantic-node' ? translateSemanticRole(selectionValue.semanticRole) : selectionValue.typeId;
-      if (selectionValue.kind === 'none') {
-        sceneSelectionTitle.textContent = '未选择节点';
-        sceneSelectionBadge.textContent = '等待选择';
-        sceneSelectionBadge.className = 'badge neutral';
-        return;
-      }
-      sceneSelectionTitle.textContent = selectionValue.name ?? '节点属性';
-      sceneSelectionBadge.textContent = '只读';
-      sceneSelectionBadge.className = 'badge neutral';
-      appendInfo(sceneBaseInfo, '节点名称', selectionValue.name ?? '未命名');
-      appendInfo(sceneBaseInfo, '本地位置', formatPosition(selectionValue.position));
-    };
-
     const render = (next: AuthoringState): void => {
       const previousUuid = state?.selection.uuid;
       if (next.selection.uuid !== previousUuid && hasAnyDraftDirty()) {
         blockedSelectionUuid = next.selection.uuid ?? '';
         blockedSelectionName = next.selection.name ?? '';
         renderSelectionBanner();
-        showStatus('选择已暂存，请保存或放弃当前草稿后切换。', false);
+        reportNotice({ kind: 'warn', title: '选择切换已暂停', message: '选择已暂存，请保存或放弃当前草稿后切换。', scope: 'draft-selection' });
         return;
       }
       blockedSelectionUuid = '';
@@ -772,10 +831,9 @@ module.exports = Editor.Panel.define({
           activePage = 'scene';
         }
       }
-      selection.textContent = next.selection.uuid === undefined ? '未选择节点' : next.selection.name ?? '未命名节点'; selection.className = next.selection.uuid === undefined ? 'value muted' : 'value'; selection.title = next.selection.path ?? next.selection.name ?? '';
       const placementMode = next.roomTarget.mode ?? (next.roomTarget.ok ? 'grid' : 'blocked');
       const placementLabel = placementMode === 'grid' ? '网格放置' : placementMode === 'canvas' ? '画布顶层放置' : placementMode === 'scene-root' ? '场景顶层放置' : '需要处理';
-      target.textContent = next.roomTarget.ok ? `${placementLabel}：${next.roomTarget.path ?? '未命名目标'}` : next.roomTarget.message; target.className = next.roomTarget.ok ? 'value' : 'value muted'; target.title = next.roomTarget.path ?? next.roomTarget.message; sceneBadge.textContent = next.roomTarget.ok ? placementLabel : '需要处理'; sceneBadge.className = `badge ${next.roomTarget.ok ? 'ok' : 'warn'}`; roomCount.textContent = `${next.rooms.length} 个`; crewCount.textContent = `${crewEntries.length} 个`; hullCount.textContent = `${hullEntries.length} 个`; navWarningCount.textContent = String(next.warnings.length); sync.innerHTML = '<i></i>已同步'; initialize.removeAttribute('disabled'); renderCategories(); renderHullList(); renderRoomList(); renderCrewList(); renderSceneInspector(next.selection); renderValidation(next); setPage(activePage);
+      sceneBadge.textContent = next.roomTarget.ok ? '已就绪' : '需要处理'; sceneBadge.className = `badge ${next.roomTarget.ok ? 'ok' : 'warn'}`; roomCount.textContent = `${next.rooms.length} 个`; crewCount.textContent = `${crewEntries.length} 个`; hullCount.textContent = `${hullEntries.length} 个`; navWarningCount.textContent = String(next.warnings.length); sync.innerHTML = '<i></i>已同步'; createOrUpdateBoot.removeAttribute('disabled'); createOrUpdateMain.removeAttribute('disabled'); createOrUpdateBattle.removeAttribute('disabled'); renderCategories(); renderHullList(); renderRoomList(); renderCrewList(); renderValidation(next); setPage(activePage);
       if (activePage === 'rooms' && roomDrafts.length === 0 && !roomDraftLoadPending) void loadRoomDraftsFromMain();
     };
 
@@ -788,7 +846,7 @@ module.exports = Editor.Panel.define({
         const next = await Editor.Message.request(PACKAGE_NAME, refreshCatalog ? 'refresh-authoring-state' : 'get-authoring-state') as AuthoringState;
         if (sequence === refreshStateSequence) render(next);
       } catch (cause) {
-        if (sequence === refreshStateSequence) { sync.innerHTML = '<i></i>读取失败'; showStatus(cause instanceof Error ? cause.message : String(cause), false); }
+        if (sequence === refreshStateSequence) { sync.innerHTML = '<i></i>读取失败'; reportNotice({ kind: 'error', title: '读取创作状态失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'authoring-state' }); }
       }
     };
 
@@ -808,7 +866,7 @@ module.exports = Editor.Panel.define({
         roomCount.textContent = `${result.drafts.length} 个`;
         renderRoomList();
       } catch (cause) {
-        if (sequence === roomDraftLoadSequence) showStatus(`读取房间 CSV 失败：${cause instanceof Error ? cause.message : String(cause)}`, false);
+        if (sequence === roomDraftLoadSequence) reportNotice({ kind: 'error', title: '读取房间 CSV 失败', message: `读取房间 CSV 失败：${cause instanceof Error ? cause.message : String(cause)}`, scope: 'room-csv-load' });
       } finally {
         if (sequence === roomDraftLoadSequence) roomDraftLoadPending = false;
       }
@@ -824,21 +882,49 @@ module.exports = Editor.Panel.define({
     const runBusy = async <T>(targets: readonly HTMLElement[], progress: string, action: () => Promise<T>): Promise<T | undefined> => {
       if (targets.some((target) => target.hasAttribute?.('disabled'))) return undefined;
       targets.forEach((target) => setElementDisabled(target, true));
-      showStatus(progress);
+      setInlineDetail(progress, 'info');
       try { return await action(); }
       finally { targets.forEach((target) => setElementDisabled(target, false)); }
     };
 
     const confirmDanger = async (message: string, detail: string): Promise<boolean> => {
       const dialog = (globalThis as { Editor?: { Dialog?: { warn?: (message: string, options?: Record<string, unknown>) => Promise<{ readonly response?: number }> } } }).Editor?.Dialog;
-      if (dialog?.warn === undefined) return true;
-      const result = await dialog.warn(message, { detail, buttons: ['取消', '继续'], cancel: 0, default: 0 });
-      return result.response === 1;
+      if (dialog?.warn === undefined) {
+        reportNotice({ kind: 'error', title: '无法确认危险操作', message: `${message}：当前 Creator 不提供公开确认弹窗，操作已停止。`, scope: 'danger-confirm' });
+        return false;
+      }
+      try {
+        const result = await dialog.warn(message, { detail, buttons: ['取消', '继续'], cancel: 0, default: 0 });
+        return result.response === 1;
+      } catch (cause) {
+        reportNotice({ kind: 'error', title: '危险操作确认失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'danger-confirm' });
+        return false;
+      }
     };
 
-    const runSceneAction = async (button: HTMLElement, message: string, progress: string): Promise<void> => {
-      const result = await runBusy([button], progress, async () => await Editor.Message.request(PACKAGE_NAME, message, field('sceneKind').value) as { ok: boolean; message: string });
-      if (result !== undefined) showStatus(result.message, result.ok);
+    const sceneUpdateButtons = [createOrUpdateBoot, createOrUpdateMain, createOrUpdateBattle] as const;
+    const sceneNames: Readonly<Record<'BOOT' | 'MAIN' | 'BATTLE', string>> = {
+      BOOT: '启动界面',
+      MAIN: '主界面',
+      BATTLE: '战斗界面',
+    };
+
+    const runSceneUpdate = async (kind: 'BOOT' | 'MAIN' | 'BATTLE'): Promise<void> => {
+      if (hasAnyDraftDirty()) {
+        reportNotice({ kind: 'warn', title: '场景更新已暂停', message: '当前领域存在未保存修改，请先保存或取消预览后再更新场景。', scope: 'scene-update' });
+        return;
+      }
+      const result = await runBusy(sceneUpdateButtons, `正在创建/更新${sceneNames[kind]}…`, async () => {
+        try {
+          return await Editor.Message.request(PACKAGE_NAME, 'create-or-update-scene', kind) as { readonly ok: boolean; readonly message: string };
+        } catch (cause) {
+          return { ok: false, message: `${sceneNames[kind]}更新失败：${cause instanceof Error ? cause.message : String(cause)}` };
+        }
+      });
+      if (result !== undefined) {
+        reportResult(`scene-update-${kind}`, `${sceneNames[kind]}更新结果`, result);
+        await refreshState(true);
+      }
     };
 
     for (const [page, button] of Object.entries(nav) as [PageId, HTMLElement][]) button.addEventListener('click', () => {
@@ -856,12 +942,12 @@ module.exports = Editor.Panel.define({
         const draft = readRoomDraftFromFields();
         if (draft === null) return;
         const checked = toRoomPreviewDto(draft);
-        if (checked.ok === false) { showStatus(`预览未发送：${checked.message}`, false); return; }
+        if (checked.ok === false) { setInlineDetail(`预览未发送：${checked.message}`, 'error'); return; }
         try {
           const result = await Editor.Message.request(PACKAGE_NAME, 'preview-room-definition', draft) as { readonly ok: boolean; readonly message: string };
-          if (sequence === roomDraftSession.sequence) showStatus(result.message, result.ok);
+          if (sequence === roomDraftSession.sequence && !result.ok) setInlineDetail(result.message, 'error');
         } catch (cause) {
-          if (sequence === roomDraftSession.sequence) showStatus(`房间预览失败：${cause instanceof Error ? cause.message : String(cause)}`, false);
+          if (sequence === roomDraftSession.sequence) setInlineDetail(`房间预览失败：${cause instanceof Error ? cause.message : String(cause)}`, 'error');
         }
       }, 150);
     };
@@ -881,9 +967,9 @@ module.exports = Editor.Panel.define({
         if (sequence !== crewDraftSession.sequence || draft.id !== selectedCrewId) return;
         try {
           const result = await Editor.Message.request(PACKAGE_NAME, 'preview-crew-definition', { draft }) as { readonly ok: boolean; readonly message: string };
-          if (sequence === crewDraftSession.sequence && draft.id === selectedCrewId) showStatus(result.message, result.ok);
+          if (sequence === crewDraftSession.sequence && draft.id === selectedCrewId && !result.ok) setInlineDetail(result.message, 'error');
         } catch (cause) {
-          if (sequence === crewDraftSession.sequence && draft.id === selectedCrewId) showStatus(`船员预览失败：${cause instanceof Error ? cause.message : String(cause)}`, false);
+          if (sequence === crewDraftSession.sequence && draft.id === selectedCrewId) setInlineDetail(`船员预览失败：${cause instanceof Error ? cause.message : String(cause)}`, 'error');
         }
       }, 150);
     };
@@ -915,9 +1001,9 @@ module.exports = Editor.Panel.define({
         if (sequence !== hullDraftSession.sequence || draft.id !== selectedHullId) return;
         try {
           const result = await Editor.Message.request(PACKAGE_NAME, 'preview-hull-definition', { draft }) as { readonly ok: boolean; readonly message: string };
-          if (sequence === hullDraftSession.sequence && draft.id === selectedHullId) showStatus(result.message, result.ok);
+          if (sequence === hullDraftSession.sequence && draft.id === selectedHullId && !result.ok) setInlineDetail(result.message, 'error');
         } catch (cause) {
-          if (sequence === hullDraftSession.sequence && draft.id === selectedHullId) showStatus(`船体预览失败：${cause instanceof Error ? cause.message : String(cause)}`, false);
+          if (sequence === hullDraftSession.sequence && draft.id === selectedHullId) setInlineDetail(`船体预览失败：${cause instanceof Error ? cause.message : String(cause)}`, 'error');
         }
       }, 150);
     };
@@ -936,29 +1022,29 @@ module.exports = Editor.Panel.define({
       pssRefresh.addEventListener('confirm', async () => {
       const result = await runBusy([pssRefresh], '正在重建 PSS 索引…', async () => {
         try { await Editor.Message.request(PACKAGE_NAME, 'build-pss-index'); pssPageNumber = 1; await renderPss(); return true; }
-        catch (cause) { pssStatus.textContent = `无法重建 PSS 索引：${cause instanceof Error ? cause.message : String(cause)}`; return false; }
+        catch (cause) { const message = `无法重建 PSS 索引：${cause instanceof Error ? cause.message : String(cause)}`; pssStatus.textContent = message; reportNotice({ kind: 'error', title: 'PSS 索引重建失败', message, scope: 'pss-index' }); return false; }
       });
-      if (result === true) showStatus('PSS 索引已重建', true);
+      if (result === true) reportNotice({ kind: 'success', title: 'PSS 索引已重建', message: 'PSS 索引已重建。', scope: 'pss-index' });
       });
       pssBindRooms.addEventListener('confirm', async () => {
         if (!await confirmDanger('确认全新重建房间外观？', '这会按视觉 CSV 重写首批房间 Prefab 的外观引用。')) return;
         await runBusy([pssBindRooms], '正在从视觉 CSV 全新重建五个房间外观…', async () => {
-          try { const result = await Editor.Message.request(PACKAGE_NAME, 'bind-first-pss-room-appearances', field('sceneKind').value) as { readonly ok: boolean; readonly message: string }; pssStatus.textContent = result.message; showStatus(result.message, result.ok); }
-          catch (cause) { pssStatus.textContent = `房间外观绑定失败：${cause instanceof Error ? cause.message : String(cause)}`; }
+          try { const result = await Editor.Message.request(PACKAGE_NAME, 'bind-first-pss-room-appearances', 'MAIN') as { readonly ok: boolean; readonly message: string }; pssStatus.textContent = result.message; reportResult('pss-room-bind', '房间外观绑定结果', result); }
+          catch (cause) { const message = `房间外观绑定失败：${cause instanceof Error ? cause.message : String(cause)}`; pssStatus.textContent = message; reportNotice({ kind: 'error', title: '房间外观绑定失败', message, scope: 'pss-room-bind' }); }
         });
       });
       pssBindCrews.addEventListener('confirm', async () => {
         if (!await confirmDanger('确认全新重建船员外观？', '这会按视觉 CSV 重写首批船员 Prefab 的外观引用。')) return;
         await runBusy([pssBindCrews], '正在从视觉 CSV 全新重建四套船员外观…', async () => {
-          try { const result = await Editor.Message.request(PACKAGE_NAME, 'bind-first-pss-crew-appearances', field('sceneKind').value) as { readonly ok: boolean; readonly message: string }; pssStatus.textContent = result.message; showStatus(result.message, result.ok); }
-          catch (cause) { pssStatus.textContent = `船员外观绑定失败：${cause instanceof Error ? cause.message : String(cause)}`; }
+          try { const result = await Editor.Message.request(PACKAGE_NAME, 'bind-first-pss-crew-appearances', 'MAIN') as { readonly ok: boolean; readonly message: string }; pssStatus.textContent = result.message; reportResult('pss-crew-bind', '船员外观绑定结果', result); }
+          catch (cause) { const message = `船员外观绑定失败：${cause instanceof Error ? cause.message : String(cause)}`; pssStatus.textContent = message; reportNotice({ kind: 'error', title: '船员外观绑定失败', message, scope: 'pss-crew-bind' }); }
         });
       });
       field('pssBindHulls').addEventListener('confirm', async () => {
         if (!await confirmDanger('确认导入并绑定新手船外观？', '这会复制 PSS 只读素材并重写主场景船体外观引用。')) return;
         await runBusy([pssBindHulls], '正在校验并导入 PSS 4324/261 船体外观…', async () => {
-          try { const result = await Editor.Message.request(PACKAGE_NAME, 'import-and-bind-first-pss-hull-appearances', field('sceneKind').value) as { readonly ok: boolean; readonly message: string }; pssStatus.textContent = result.message; showStatus(result.message, result.ok); }
-          catch (cause) { pssStatus.textContent = `船体外观导入失败：${cause instanceof Error ? cause.message : String(cause)}`; }
+          try { const result = await Editor.Message.request(PACKAGE_NAME, 'import-and-bind-first-pss-hull-appearances', 'MAIN') as { readonly ok: boolean; readonly message: string }; pssStatus.textContent = result.message; reportResult('pss-hull-bind', '船体外观导入结果', result); }
+          catch (cause) { const message = `船体外观导入失败：${cause instanceof Error ? cause.message : String(cause)}`; pssStatus.textContent = message; reportNotice({ kind: 'error', title: '船体外观导入失败', message, scope: 'pss-hull-bind' }); }
         });
       });
       pssPrevious.addEventListener('confirm', () => { pssPageNumber = Math.max(1, pssPageNumber - 1); void renderPss(); });
@@ -984,11 +1070,13 @@ module.exports = Editor.Panel.define({
             csvState.className = 'badge warn';
           }
           csvStatus.textContent = result.ok ? `全部配置表校验通过：${result.message}` : result.message;
-          showStatus(result.message, result.ok);
+          reportResult('csv-import', 'CSV 批量导入结果', result);
         } catch (cause) {
           csvState.textContent = '读取失败';
           csvState.className = 'badge warn';
-          csvStatus.textContent = `读取配置表失败：${cause instanceof Error ? cause.message : String(cause)}`;
+          const message = `读取配置表失败：${cause instanceof Error ? cause.message : String(cause)}`;
+          csvStatus.textContent = message;
+          reportNotice({ kind: 'error', title: 'CSV 批量导入失败', message, scope: 'csv-import' });
         }
         });
       });
@@ -1024,12 +1112,12 @@ module.exports = Editor.Panel.define({
       const draft = readRoomDraftFromFields();
       if (draft === null) return;
       const checked = toRoomPreviewDto(draft);
-      if (checked.ok === false) { editState.textContent = '校验失败'; showStatus(checked.message, false); return; }
+      if (checked.ok === false) { editState.textContent = '校验失败'; reportNotice({ kind: 'error', title: '房间保存校验失败', message: checked.message, scope: 'room-save' }); return; }
       invalidateDraftSession(roomDraftSession);
       editState.textContent = '保存中…';
       try {
         const result = await Editor.Message.request(PACKAGE_NAME, 'save-room-csv-draft', { draft }) as { readonly ok: boolean; readonly message: string; readonly draft?: RoomCsvDraft };
-        showStatus(result.message, result.ok);
+        reportResult('room-save', '房间保存结果', result);
         if (result.ok) {
           roomDraftSession.dirty = false;
           roomDraftBaseline = result.draft ?? draft;
@@ -1039,15 +1127,15 @@ module.exports = Editor.Panel.define({
         } else editState.textContent = '校验失败';
       } catch (cause) {
         editState.textContent = '保存失败';
-        showStatus(cause instanceof Error ? cause.message : String(cause), false);
+        reportNotice({ kind: 'error', title: '房间保存失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'room-save' });
       }
     });
     newRoom.addEventListener('confirm', async () => {
-      showStatus('正在创建房间定义草稿…');
+      setInlineDetail('正在创建房间定义草稿…', 'info');
       try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-room-csv-draft', {} ) as { readonly ok: boolean; readonly message: string; readonly draft?: RoomCsvDraft };
         if (result.ok && result.draft) { roomDrafts = [...roomDrafts, result.draft]; selectedRoomId = result.draft.id; roomDraftBaseline = result.draft; applyRoomDraftToFields(result.draft); roomDraftSession.dirty = true; editState.textContent = '新建草稿'; editState.className = 'badge warn'; renderRoomList(); renderInspector(); setPage('rooms'); }
-        showStatus(result.message, result.ok);
-      } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); }
+        reportResult('room-draft-create', '房间草稿创建结果', result);
+      } catch (cause) { reportNotice({ kind: 'error', title: '房间草稿创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'room-draft-create' }); }
     });
     cancelRoom.addEventListener('confirm', async () => {
       try { await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); } catch { /* 清理失败时仍恢复表单基线 */ }
@@ -1057,7 +1145,7 @@ module.exports = Editor.Panel.define({
         roomDraftBaseline = undefined;
         roomDraftSession.dirty = false;
         await loadRoomDraftsFromMain();
-        showStatus('已取消新建房间定义草稿', true);
+        reportNotice({ kind: 'success', title: '已取消房间草稿', message: '已取消新建房间定义草稿。', scope: 'room-draft-cancel' });
         return;
       }
       if (!roomDraftSession.dirty) { await loadRoomDraftsFromMain(); return; }
@@ -1066,7 +1154,7 @@ module.exports = Editor.Panel.define({
         editState.textContent = '已取消修改';
         editState.className = 'badge neutral';
         roomDraftSession.dirty = false;
-        showStatus('已取消房间 CSV 草稿修改', true);
+        reportNotice({ kind: 'success', title: '已取消房间修改', message: '已取消房间 CSV 草稿修改。', scope: 'room-draft-cancel' });
       } else {
         roomDraftSession.dirty = false;
         await loadRoomDraftsFromMain();
@@ -1074,70 +1162,39 @@ module.exports = Editor.Panel.define({
     });
     saveRoomInstance.addEventListener('confirm', async () => {
       const selection = state?.selection.kind === 'room-instance' ? state.selection : undefined;
-      if (selection?.uuid === undefined) { showStatus('请先选择房间实例', false); return; }
+      if (selection?.uuid === undefined) { reportNotice({ kind: 'warn', title: '无法保存房间实例', message: '请先选择房间实例。', scope: 'room-instance-save' }); return; }
       const x = Number(editInstanceX.value); const y = Number(editInstanceY.value); const initialHp = Number(editInstanceHp.value);
-      if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(initialHp)) { showStatus('实例位置和初始耐久必须是整数', false); return; }
+      if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(initialHp)) { reportNotice({ kind: 'warn', title: '房间实例输入无效', message: '实例位置和初始耐久必须是整数。', scope: 'room-instance-save' }); return; }
       saveRoomInstance.setAttribute('disabled', 'true');
       try {
         const result = await Editor.Message.request(PACKAGE_NAME, 'update-room-instance', { nodeUuid: selection.uuid, x, y, initialHp }) as { readonly ok: boolean; readonly message: string };
-        showStatus(result.message, result.ok);
+        reportResult('room-instance-save', '房间实例保存结果', result);
         if (result.ok) { roomInstanceDirty = false; await refreshState(true, false); }
       } catch (cause) {
-        showStatus(cause instanceof Error ? cause.message : String(cause), false);
+        reportNotice({ kind: 'error', title: '房间实例保存失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'room-instance-save' });
       } finally { saveRoomInstance.removeAttribute('disabled'); }
     });
-    cancelRoomInstance.addEventListener('confirm', () => { roomInstanceDirty = false; renderInspector(); showStatus('已取消房间实例修改', true); });
+    cancelRoomInstance.addEventListener('confirm', () => { roomInstanceDirty = false; renderInspector(); reportNotice({ kind: 'success', title: '已取消房间实例修改', message: '已取消房间实例修改。', scope: 'room-instance-cancel' }); });
     editInstanceX.addEventListener('input', () => { roomInstanceDirty = true; });
     editInstanceY.addEventListener('input', () => { roomInstanceDirty = true; });
     editInstanceHp.addEventListener('input', () => { roomInstanceDirty = true; });
-    newCrew.addEventListener('confirm', async () => { try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-csv-draft', {}) as { ok: boolean; message: string; draft?: Record<string, string> }; showStatus(result.message, result.ok); if (result.ok && result.draft) { invalidateDraftSession(crewDraftSession); selectedCrewId = result.draft.id; crewDraftBaseline = result.draft; crewDraftSession.dirty = false; renderCrewInspector(); crewDraftSession.dirty = true; crewEditState.textContent = '新建草稿'; crewEditState.className = 'badge warn'; } } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    cancelCrew.addEventListener('confirm', async () => { invalidateDraftSession(crewDraftSession); try { await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); } catch { /* 表单基线仍可恢复 */ } if (crewDraftBaseline) { const isNew = !crewEntries.some((entry) => entry.id === crewDraftBaseline?.id); if (isNew) { selectedCrewId = ''; crewDraftBaseline = undefined; crewEditState.textContent = '已取消'; crewInspector.hidden = true; crewEmpty.hidden = false; } else { for (const [key, value] of Object.entries(crewDraftBaseline)) { const target = field(`crewEdit${key[0].toUpperCase()}${key.slice(1)}`); if (target) target.value = value; } crewEditState.textContent = '已取消修改'; crewEditState.className = 'badge neutral'; } crewDraftSession.dirty = false; showStatus('已取消船员草稿修改', true); } });
-    saveCrew.addEventListener('confirm', async () => { const draft = readCrewEditDraft(); if (draft === null) return; invalidateDraftSession(crewDraftSession); crewEditState.textContent = '保存中…'; try { const result = await Editor.Message.request(PACKAGE_NAME, 'save-crew-csv-draft', { draft }) as { ok: boolean; message: string }; showStatus(result.message, result.ok); crewEditState.textContent = result.ok ? '已保存' : '校验失败'; if (result.ok) { crewDraftBaseline = draft; crewDraftSession.dirty = false; await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); await refreshState(true); } } catch (cause) { crewEditState.textContent = '保存失败'; showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    newHull.addEventListener('confirm', async () => { try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-hull-csv-draft', {}) as { ok: boolean; message: string; draft?: Record<string, string> }; showStatus(result.message, result.ok); if (result.ok && result.draft) { invalidateDraftSession(hullDraftSession); selectedHullId = result.draft.id; hullDraftBaseline = result.draft; hullDraftSession.dirty = true; field('hullId').value = result.draft.id; field('hullDisplayName').value = result.draft.displayName ?? ''; field('hullLevel').value = result.draft.level ?? ''; field('hullGridWidth').value = result.draft.gridWidth ?? ''; field('hullGridHeight').value = result.draft.gridHeight ?? ''; field('hullMaxCrew').value = result.draft.maxCrew ?? ''; field('hullMaxRooms').value = result.draft.maxRooms ?? ''; field('hullVisualId').value = result.draft.visualId ?? ''; field('hullCellMask').value = result.draft.cellMask ?? ''; } } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    cancelHull.addEventListener('confirm', async () => { invalidateDraftSession(hullDraftSession); try { await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); } catch { /* 表单基线仍可恢复 */ } if (hullDraftBaseline) { const isNew = !hullEntries.some((entry) => entry.id === hullDraftBaseline?.id); if (isNew) { selectedHullId = ''; hullDraftBaseline = undefined; } else { field('hullDisplayName').value = hullDraftBaseline.displayName ?? ''; field('hullLevel').value = hullDraftBaseline.level ?? ''; field('hullGridWidth').value = hullDraftBaseline.gridWidth ?? ''; field('hullGridHeight').value = hullDraftBaseline.gridHeight ?? ''; field('hullMaxCrew').value = hullDraftBaseline.maxCrew ?? ''; field('hullMaxRooms').value = hullDraftBaseline.maxRooms ?? ''; field('hullVisualId').value = hullDraftBaseline.visualId ?? ''; field('hullCellMask').value = hullDraftBaseline.cellMask ?? ''; } hullDraftSession.dirty = false; showStatus('已取消船体草稿修改', true); } });
-    createHull.addEventListener('confirm', () => { setPage('hulls'); showStatus('请使用“新建定义”创建 hulls.csv 草稿，再保存。', false); });
-    saveHull.addEventListener('confirm', async () => { const entry = hullEntries.find((item) => item.id === selectedHullId); const baseline = hullDraftBaseline?.id === selectedHullId ? hullDraftBaseline : undefined; if (entry === undefined && baseline === undefined) { showStatus('请先选择一个船体定义', false); return; } const draft = readHullEditDraft(); if (draft === null) { showStatus('请先选择一个船体定义', false); return; } invalidateDraftSession(hullDraftSession); showStatus('正在保存 hulls.csv…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'save-hull-csv-draft', { draft }) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) { hullDraftBaseline = draft; hullDraftSession.dirty = false; await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); await refreshState(true); } } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    newCrew.addEventListener('confirm', async () => { setInlineDetail('正在创建船员定义草稿…', 'info'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-csv-draft', {}) as { ok: boolean; message: string; draft?: Record<string, string> }; reportResult('crew-draft-create', '船员草稿创建结果', result); if (result.ok && result.draft) { invalidateDraftSession(crewDraftSession); selectedCrewId = result.draft.id; crewDraftBaseline = result.draft; crewDraftSession.dirty = false; renderCrewInspector(); crewDraftSession.dirty = true; crewEditState.textContent = '新建草稿'; crewEditState.className = 'badge warn'; } } catch (cause) { reportNotice({ kind: 'error', title: '船员草稿创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'crew-draft-create' }); } });
+    cancelCrew.addEventListener('confirm', async () => { invalidateDraftSession(crewDraftSession); try { await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); } catch { /* 表单基线仍可恢复 */ } if (crewDraftBaseline) { const isNew = !crewEntries.some((entry) => entry.id === crewDraftBaseline?.id); if (isNew) { selectedCrewId = ''; crewDraftBaseline = undefined; crewEditState.textContent = '已取消'; crewInspector.hidden = true; crewEmpty.hidden = false; } else { for (const [key, value] of Object.entries(crewDraftBaseline)) { const target = field(`crewEdit${key[0].toUpperCase()}${key.slice(1)}`); if (target) target.value = value; } crewEditState.textContent = '已取消修改'; crewEditState.className = 'badge neutral'; } crewDraftSession.dirty = false; reportNotice({ kind: 'success', title: '已取消船员修改', message: '已取消船员草稿修改。', scope: 'crew-draft-cancel' }); } });
+    saveCrew.addEventListener('confirm', async () => { const draft = readCrewEditDraft(); if (draft === null) return; invalidateDraftSession(crewDraftSession); crewEditState.textContent = '保存中…'; try { const result = await Editor.Message.request(PACKAGE_NAME, 'save-crew-csv-draft', { draft }) as { ok: boolean; message: string }; reportResult('crew-save', '船员保存结果', result); crewEditState.textContent = result.ok ? '已保存' : '校验失败'; if (result.ok) { crewDraftBaseline = draft; crewDraftSession.dirty = false; await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); await refreshState(true); } } catch (cause) { crewEditState.textContent = '保存失败'; reportNotice({ kind: 'error', title: '船员保存失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'crew-save' }); } });
+    newHull.addEventListener('confirm', async () => { setInlineDetail('正在创建船体定义草稿…', 'info'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-hull-csv-draft', {}) as { ok: boolean; message: string; draft?: Record<string, string> }; reportResult('hull-draft-create', '船体草稿创建结果', result); if (result.ok && result.draft) { invalidateDraftSession(hullDraftSession); selectedHullId = result.draft.id; hullDraftBaseline = result.draft; hullDraftSession.dirty = true; field('hullId').value = result.draft.id; field('hullDisplayName').value = result.draft.displayName ?? ''; field('hullLevel').value = result.draft.level ?? ''; field('hullGridWidth').value = result.draft.gridWidth ?? ''; field('hullGridHeight').value = result.draft.gridHeight ?? ''; field('hullMaxCrew').value = result.draft.maxCrew ?? ''; field('hullMaxRooms').value = result.draft.maxRooms ?? ''; field('hullVisualId').value = result.draft.visualId ?? ''; field('hullCellMask').value = result.draft.cellMask ?? ''; } } catch (cause) { reportNotice({ kind: 'error', title: '船体草稿创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'hull-draft-create' }); } });
+    cancelHull.addEventListener('confirm', async () => { invalidateDraftSession(hullDraftSession); try { await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); } catch { /* 表单基线仍可恢复 */ } if (hullDraftBaseline) { const isNew = !hullEntries.some((entry) => entry.id === hullDraftBaseline?.id); if (isNew) { selectedHullId = ''; hullDraftBaseline = undefined; } else { field('hullDisplayName').value = hullDraftBaseline.displayName ?? ''; field('hullLevel').value = hullDraftBaseline.level ?? ''; field('hullGridWidth').value = hullDraftBaseline.gridWidth ?? ''; field('hullGridHeight').value = hullDraftBaseline.gridHeight ?? ''; field('hullMaxCrew').value = hullDraftBaseline.maxCrew ?? ''; field('hullMaxRooms').value = hullDraftBaseline.maxRooms ?? ''; field('hullVisualId').value = hullDraftBaseline.visualId ?? ''; field('hullCellMask').value = hullDraftBaseline.cellMask ?? ''; } hullDraftSession.dirty = false; reportNotice({ kind: 'success', title: '已取消船体修改', message: '已取消船体草稿修改。', scope: 'hull-draft-cancel' }); } });
+    createHull.addEventListener('confirm', () => { setPage('hulls'); reportNotice({ kind: 'warn', title: '请先创建船体草稿', message: '请使用“新建定义”创建 hulls.csv 草稿，再保存。', scope: 'hull-create-help' }); });
+    saveHull.addEventListener('confirm', async () => { const entry = hullEntries.find((item) => item.id === selectedHullId); const baseline = hullDraftBaseline?.id === selectedHullId ? hullDraftBaseline : undefined; if (entry === undefined && baseline === undefined) { reportNotice({ kind: 'warn', title: '无法保存船体', message: '请先选择一个船体定义。', scope: 'hull-save' }); return; } const draft = readHullEditDraft(); if (draft === null) { reportNotice({ kind: 'warn', title: '无法保存船体', message: '请先选择一个船体定义。', scope: 'hull-save' }); return; } invalidateDraftSession(hullDraftSession); setInlineDetail('正在保存 hulls.csv…', 'info'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'save-hull-csv-draft', { draft }) as { ok: boolean; message: string }; reportResult('hull-save', '船体保存结果', result); if (result.ok) { hullDraftBaseline = draft; hullDraftSession.dirty = false; await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview'); await refreshState(true); } } catch (cause) { reportNotice({ kind: 'error', title: '船体保存失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'hull-save' }); } });
     for (const key of ['hullDisplayName', 'hullLevel', 'hullGridWidth', 'hullGridHeight', 'hullMaxCrew', 'hullMaxRooms', 'hullVisualId', 'hullCellMask']) field(key).addEventListener('input', queueHullPreview);
-    createShip.addEventListener('confirm', async () => { const entry = hullEntries.find((item) => item.id === selectedHullId); if (entry === undefined) { showStatus('请先选择一个船体定义', false); return; } showStatus('正在创建飞船实例…'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-ship-instance', entry) as { ok: boolean; message: string }; showStatus(result.message, result.ok); if (result.ok) await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    createSelectedCrew.addEventListener('confirm', async () => { const entry = crewEntries.find((item) => item.id === selectedCrewId); if (entry === undefined) return; showStatus(`正在创建 ${entry.displayName} 实例…`); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-instance', { entry, nameMode: crewInstanceNameMode.value, callSign: crewInstanceCallSign.value.trim() }) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
+    createShip.addEventListener('confirm', async () => { const entry = hullEntries.find((item) => item.id === selectedHullId); if (entry === undefined) { reportNotice({ kind: 'warn', title: '无法创建飞船', message: '请先选择一个船体定义。', scope: 'ship-instance-create' }); return; } setInlineDetail('正在创建飞船实例…', 'info'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-ship-instance', entry) as { ok: boolean; message: string }; reportResult('ship-instance-create', '飞船实例创建结果', result); if (result.ok) await refreshState(true); } catch (cause) { reportNotice({ kind: 'error', title: '飞船实例创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'ship-instance-create' }); } });
+    createSelectedCrew.addEventListener('confirm', async () => { const entry = crewEntries.find((item) => item.id === selectedCrewId); if (entry === undefined) return; setInlineDetail(`正在创建 ${entry.displayName} 实例…`, 'info'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-crew-instance', { entry, nameMode: crewInstanceNameMode.value, callSign: crewInstanceCallSign.value.trim() }) as { ok: boolean; message: string }; reportResult('crew-instance-create', '船员实例创建结果', result); await refreshState(true); } catch (cause) { reportNotice({ kind: 'error', title: '船员实例创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'crew-instance-create' }); } });
     openSelectedCrewPrefab.addEventListener('confirm', () => { const entry = crewEntries.find((item) => item.id === selectedCrewId); if (entry !== undefined) Editor.Message.send(PACKAGE_NAME, 'open-created-prefab', entry.prefabUrl); });
-    createSelectedRoom.addEventListener('confirm', () => { const entry = roomEntries.find((item) => item.id === selectedRoomId); if (entry === undefined) return; void (async () => { showStatus(`正在创建 ${entry.displayName}…`); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-room-instance', entry) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } })(); });
+    createSelectedRoom.addEventListener('confirm', () => { const entry = roomEntries.find((item) => item.id === selectedRoomId); if (entry === undefined) return; void (async () => { setInlineDetail(`正在创建 ${entry.displayName}…`, 'info'); try { const result = await Editor.Message.request(PACKAGE_NAME, 'create-room-instance', entry) as { ok: boolean; message: string }; reportResult('room-instance-create', '房间实例创建结果', result); await refreshState(true); } catch (cause) { reportNotice({ kind: 'error', title: '房间实例创建失败', message: cause instanceof Error ? cause.message : String(cause), scope: 'room-instance-create' }); } })(); });
     openSelectedPrefab.addEventListener('confirm', () => { const entry = roomEntries.find((item) => item.id === selectedRoomId); if (entry !== undefined) Editor.Message.send(PACKAGE_NAME, 'open-created-prefab', entry.prefabUrl); });
-    initialize.addEventListener('confirm', async () => { const kind = field('sceneKind').value; const kindName = kind === 'BOOT' ? '启动场景' : kind === 'MAIN' ? '主场景' : '战斗场景'; showStatus(`正在初始化${kindName}中文骨架…`); try { const result = await Editor.Message.request(PACKAGE_NAME, 'initialize-scene-skeleton', kind) as { ok: boolean; message: string }; showStatus(result.message, result.ok); await refreshState(true); } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); } });
-    field('createFoundation').addEventListener('confirm', () => { void runSceneAction(field('createFoundation'), 'create-foundation-prefabs', '正在预检并升级共享 UIRoot、页面和 ShipView Prefab…'); });
-    field('rebuildP8StarterShip').addEventListener('confirm', async () => {
-      if (field('sceneKind').value !== 'MAIN') { showStatus('P8.3 标准新手船只能重建到主场景', false); return; }
-      if (!await confirmDanger('确认全新重建 P8.3 资源与标准新手船？', '这会重写主场景中的演示资源、视觉绑定和标准新手船实例。')) return;
-      const result = await runBusy([field('rebuildP8StarterShip')], '正在全新重建 P8.3 资源、视觉绑定和标准新手船…', async () => {
-        try { return await Editor.Message.request(PACKAGE_NAME, 'rebuild-p8-starter-ship') as { ok: boolean; message: string }; }
-        catch (cause) { return { ok: false, message: `P8.3 全新重建失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
-      });
-      if (result !== undefined) { showStatus(result.message, result.ok); await refreshState(true); }
-    });
-    field('configureP8').addEventListener('confirm', async () => {
-      if (field('sceneKind').value !== 'MAIN') { showStatus('P8 双层演示只能装配到主场景', false); return; }
-      showStatus('正在装配双层地板、楼梯/电梯和士兵巡逻路线…');
-      try {
-        const result = await Editor.Message.request(PACKAGE_NAME, 'configure-p8-voxel-demo-scene') as { ok: boolean; message: string };
-        showStatus(result.message, result.ok);
-        await refreshState(true);
-      } catch (cause) { showStatus(cause instanceof Error ? cause.message : String(cause), false); }
-    });
-    field('mountSharedUi').addEventListener('confirm', () => { void runSceneAction(field('mountSharedUi'), 'mount-shared-ui', '正在挂载共享 UIRoot Prefab…'); });
-    field('wireFoundation').addEventListener('confirm', () => { void runSceneAction(field('wireFoundation'), 'wire-scene-foundation', '正在连接场景持久引用…'); });
-    previewPage.addEventListener('confirm', async () => { const result = await Editor.Message.request(PACKAGE_NAME, 'preview-page', pagePreviewKind.value) as { ok: boolean; message: string }; showStatus(result.message, result.ok); });
-    openPagePrefab.addEventListener('confirm', async () => { const result = await Editor.Message.request(PACKAGE_NAME, 'open-page-prefab', pagePreviewKind.value) as { ok: boolean; message: string }; showStatus(result.message, result.ok); });
-    field('cancelAuthoringPreview').addEventListener('confirm', async () => {
-      showStatus('正在取消当前编辑器预览…');
-      try {
-        const result = await Editor.Message.request(PACKAGE_NAME, 'cancel-authoring-preview') as { ok: boolean; message: string };
-        showStatus(result.message, result.ok);
-        await refreshState(true, false);
-      } catch (cause) {
-        showStatus(`取消编辑器预览失败：${cause instanceof Error ? cause.message : String(cause)}`, false);
-      }
-    });
-    sceneRefresh.addEventListener('confirm', () => { void refreshState(true); }); refresh.addEventListener('confirm', () => { void refreshState(true); });
+    createOrUpdateBoot.addEventListener('confirm', () => { void runSceneUpdate('BOOT'); });
+    createOrUpdateMain.addEventListener('confirm', () => { void runSceneUpdate('MAIN'); });
+    createOrUpdateBattle.addEventListener('confirm', () => { void runSceneUpdate('BATTLE'); });
+    refresh.addEventListener('confirm', () => { void refreshState(true); });
     setPage('scene'); renderCategories(); void renderPss();
     startPolling = () => { if (timer !== undefined) return; void refreshState(true); if (activePage === 'rooms' && !roomDraftLoadPending) void loadRoomDraftsFromMain(); timer = setInterval(() => { if (!batchPaused) void refreshState(false); }, 500); };
     stopPolling = () => { if (timer !== undefined) clearInterval(timer); timer = undefined; };

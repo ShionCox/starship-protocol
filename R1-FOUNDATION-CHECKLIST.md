@@ -34,7 +34,7 @@
 - [x] Bootstrap 源码不存在运行时 UI fallback、硬编码消费者房间或动态补节点/组件。
 - [x] Creator 中持久保存 `BootScene.scene`、`MainScene.scene`、`BattleScene.scene`。
 - [x] Creator 中持久保存 `ShipView.prefab` 与 `UIRoot.prefab`；Main/Battle 使用同一 UIRoot 源。
-- [x] `MainMenuPage`、`GalaxyMapPage`、`ShipMainPage`、`BuildPage`、`CrewPage`、`SettingsPopup` 以 Page Prefab 形式挂到 MainScene。
+- [x] （迁移前历史基线）`MainMenuPage`、`GalaxyMapPage`、`ShipMainPage`、`BuildPage`、`CrewPage`、`SettingsPopup` 曾以 Page Prefab 形式挂到 MainScene；当前收敛状态见下方 ADR-0006 项。
 - [x] 两种不同 Mask 船体在编辑器可见；BattleScene 同时持久显示互不串联的我方/敌方 ShipView。
 - [x] 三场景共用 Cocos 原生 1280×720 `SHOW_ALL` 适配；MainScene 预加载 BattleScene，不保留浏览器 CSS 放大低分辨率画布的单独逻辑。
 - [x] 新三场景通过后删除 `PrototypeScene.scene`。
@@ -47,7 +47,7 @@
 - [x] 房间、船员、船体只通过公开 Asset DB / Scene API / Undo 操作。
 - [x] 房间与船员创建共享最小资源清理事务，多个清理失败互不短路。
 - [x] 增加船体定义创建/编辑/发现和飞船实例创建。
-- [x] 场景页支持启动、主、战斗三种中文骨架，不生成一次性玩法内容。
+- [x] 场景页收敛为三个固定的一键创建/更新入口：启动界面、主界面、战斗界面；不再暴露迁移、挂载、连接、P8 重建或页面预览动作。
 - [x] 识别器顺序为房间 → 船员 → 飞船 → 中文语义节点 → 普通节点。
 
 ## [x] P4：未来服务器与离线收益契约
@@ -84,7 +84,7 @@
 
 ## 自动门槛
 
-- [x] 根目录 `npm test`：核心 159/159、编辑器扩展 108/108 通过（2026-08-15，包含未分配工程师建造不推进、Creator 序列化资源所有权、PSS 持久动画、P8 CSV、体素布局、跨层导航、巡逻、施工/拆除/离线存档、三工程师标准双层工位分配、施工快照一致性、UI 清晰度、站立格移动、船员命中及 Creator 重建竞态回归）。
+- [x] 根目录 `npm test`：核心 161/161、编辑器扩展 106/106 通过（2026-08-17，包含未分配工程师建造不推进、Creator 序列化资源所有权、PSS 持久动画、P8 CSV、体素布局、跨层导航、巡逻、施工/拆除/离线存档、三工程师标准双层工位分配、施工快照一致性、UI 清晰度、站立格移动、船员命中及 Creator 重建竞态回归）。
 - [x] Cocos Creator 3.8.8 内置 TypeScript `--noEmit` 通过。
 - [x] `git diff --check` 通过。
 - [x] GameCore 无 `cc`、DOM、localStorage 或 Node 内置 API；runtime 无 Prototype fallback 和旧 Key。
@@ -115,7 +115,7 @@
 - [x] 固定墙、地板支撑、楼梯/电梯停靠口和体素导航已进入纯 TypeScript GameCore；同层只左右连通，上下相邻不得形成捷径。
 - [x] 施工 Command、金属、槽位、工程师加速、取消退款、拆除校验、显式时间结算、时钟回拨和离线施工已通过自动测试。
 - [x] 船员支持 `PATROLLING` / `CONSTRUCTING`；士兵路线、游标、暂停和阻断图版本进入快照，玩家任务可抢占并在 10 Tick 后恢复。
-- [x] Cocos 已提供 `FloorView`、`ConstructionGhostView`、`BuildPageController`、`BuildablePrefabCatalog` 和 `ShipContentViewSync`；插件 2.0.0 提供九张运行时 CSV、编辑器 Prefab 映射、房间实时草稿与 P8 双层演示装配入口。
+- [x] Cocos 已提供 `FloorView`、`ConstructionGhostView`、`BuildPageController`、`BuildablePrefabCatalog` 和 `ShipContentViewSync`；插件 2.0.0 提供九张运行时 CSV、编辑器 Prefab 映射、房间实时草稿，并将场景补齐逻辑收敛到三个固定一键入口。
 - [x] Creator 中已按最新标准演示重新装配下层 17 块、上层 17 块地板，下层 (18,1) 保留为建造/拆除回归空位、反应堆/激光/护盾/医疗/楼梯/电梯、四职业共六名船员（三名工程师）及士兵四点巡逻路线；MainScene 序列化与 2026-08-14 17:07 正式构建均已核对六个稳定船员 ID。
 - [x] 全新来源 `localhost:7470` 冷启动实测士兵从下层激光室到上层医疗室、上层护盾室并经过连接器；UI 层级未再被飞船遮挡。
 - [x] Web 手工完成房间建造、三工程师分配与加速、第二项目取消退款、刷新恢复；最终构建全过程游戏 Console 0 warning / 0 error。
@@ -135,9 +135,9 @@
 - [x] 新增 `WorldInteractionController`：左键切换、空白/`Esc` 取消、右键 Cocos 菜单、UI 命中隔离和单 Graphics 网格悬浮；Camera 仍只响应左键拖动。
 - [x] `FloorView` 改为完整 24×24 格并保留 1px 内边界；ShipView 创作结构固定为网格→地板→高亮→房间→船员→施工→特效。
 - [x] `CrewView` 解析 FLOOR / ROOM_STATION / CONNECTOR_STOP 锚点，Tween 不超过 0.1 秒；锚点缺失中文报错，不再静默跳到房间中心。
-- [x] 插件共享基础升级入口会通过 Creator 公开 API 持久刷新 ShipView 分层和 UIRoot 世界交互菜单；运行时不补关键节点或组件。
-- [x] 2026-08-15 自动门槛：根 `npm test` 核心 159/159、扩展 108/108；扩展 clean build、`git diff --check` 和 GameCore 边界扫描通过，插件 `dist` Git 跟踪数为 0。Creator/Web 人工验收仍单独记录。
-- [x] Creator 实际完成 P8.3 全新重建并持久保存 ShipView/UIRoot/Main/Battle 引用；序列化资源测试确认应用根来源和 ShipView 接线，正式 Web 初始化 Console 0 warning / 0 error。
+- [x] 共享基础升级逻辑已并入三个场景入口的固定分支，通过 Creator 公开 API 持久刷新 ShipView 分层和 UIRoot 世界交互菜单；运行时不补关键节点或组件。
+- [x] 2026-08-16 自动门槛：根 `npm test` 核心 161/161、扩展 108/108；扩展 clean build、`git diff --check` 和 GameCore 边界扫描通过，插件 `dist` Git 跟踪数为 0。Creator/Web 人工验收仍单独记录。
+- [x] Creator 已持久保存 ShipView/UIRoot/Main/Battle 引用；当前三场景更新分支只补齐缺失内容、修复失效引用并保留有效布局，不再执行破坏式 P8 全量重建；序列化资源测试确认应用根来源和 ShipView 接线，正式 Web 初始化 Console 0 warning / 0 error。
 - [x] Web Desktop 实测左键/空白/Esc、右键禁用原因、网格悬浮、地板层级、普通地板停止、跨层连接器路径、刷新恢复，Console 0 warning / 0 error。
 - [x] Codex 内置浏览器分别量测并持久截图电梯 5 Tick、楼梯 8 Tick；士兵巡逻被移动订单抢占后可停止，状态面板记录“恢复：已完成（10 Tick）”，最终 Web Console 0 warning / 0 error。
 - [x] 当前已完成结果与截图补入 `docs/evidence/R1-P8-INTERACTION.md`；未勾项仍不得据此提前宣称 P7、P8 或完整 R1 完成。
@@ -150,17 +150,16 @@
 - [x] 房间、船员、船体支持新建草稿、取消草稿和追加/覆盖 CSV；保存时自动补齐编辑器 Prefab 映射并再次执行整批校验。
 - [x] 配置表页改为只读审计；旧 JSON 资产删除仅通过用户确认后的 Creator Asset DB 操作，不在运行时或启动时自动删除。
 - [x] 九张 CSV 引用集中到 Main/Battle“应用根”的唯一来源；领域 Prefab 改用内存 DTO 预览，重建删除逐 Prefab 九表写入，并以资源状态与 650ms 静默窗口取代固定等待。
-- [x] 2026-08-15 自动门槛：根 `npm test` 核心 159/159、扩展 108/108；扩展 2.0.0 clean build、TypeScript `--noEmit` 与 `git diff --check` 通过。
-- [x] Creator 重载扩展并完成全新重建；九张运行时 CSV、`editor-prefabs.csv`、共享 Prefab 与 Main/Battle 应用根引用已持久化，旧 `assets/config/rooms`、`crew`、`hulls` JSON/Meta 已从 Asset DB 结果中移除。
-- [x] Creator 已实测页面隔离预览/直接打开 Page Prefab、房间新建草稿与取消、船体 V/B/W Mask 草稿与取消、船员草稿与取消；清空历史构建日志后冷重开四个 Crew、六个 Room Prefab，并依次切换 Battle/Boot/Main，最终 Console 0 warning / 0 error。证据：`docs/evidence/R1-P8.3-creator-console-zero-after-cold-reopen.jpg`。
+- [x] 2026-08-16 自动门槛：根 `npm test` 核心 161/161、扩展 108/108；扩展 2.0.0 clean build、TypeScript `--noEmit` 与 `git diff --check` 通过。
+- [x] Creator 已持久化九张运行时 CSV、`editor-prefabs.csv`、共享 Prefab 与 Main/Battle 应用根引用，旧 `assets/config/rooms`、`crew`、`hulls` JSON/Meta 已从 Asset DB 结果中移除；后续场景更新沿用非破坏式固定分支。
+- [x] Creator 已实测房间新建草稿与取消、船体 V/B/W Mask 草稿与取消、船员草稿与取消；页面预览统一由 `MainScreen` Inspector 的“编辑器预览页面”完成，场景页不再提供独立预览按钮。证据：`docs/evidence/R1-P8.3-creator-console-zero-after-cold-reopen.jpg`。
 - [x] Web Desktop 实测持久房间、保存/刷新恢复、船体网格、选择/右键菜单和建造；正式构建 Console 0 warning / 0 error，证据已补入 `docs/evidence/R1-P8-INTERACTION.md`。
 - [x] Creator 侧实时房间预览/取消/保存、V/B/W Mask、船员草稿、页面隔离与 Prefab 持久动画均已形成可见操作证据；P8.3 主项完成。巡逻与三工程师施工的连续动画证据仍归 P7/P8 收口，不在此重复扩大验收范围。
 
-## [ ] UI 模块化与动态主页面迁移（新增验收项）
+## [x] UI 三层核心 Prefab 与持久主页面迁移（ADR-0006）
 
-- [x] `MainScreen.prefab`、`BattleHUD.prefab`、`PowerPanel.prefab`、`CrewStatusPanel.prefab`、世界交互模块和三个弹窗模块已有独立创建/升级入口；五个 Page Prefab 仍由 `main` Bundle 持有。
-- [x] `MainPageRouter` 改为五个 Prefab 引用 + 唯一页面挂载点；切页采用 instantiate/绑定/销毁旧页顺序，失败时销毁新页并保留旧页。
-- [x] `MainSceneBootstrap` 只持久引用 `MainPageRouter`；建造页控制器随页面挂载绑定最新快照，卸载清空并由 `onDisable()` 取消拖拽。
-- [x] Creator 实际迁移 UIRoot：主页面挂载点为空、模块实例唯一、旧持久 Page 节点已移除；每个模块可独立打开、移动并保存。证据：`docs/evidence/R1-UI-MODULE-CREATOR-MIGRATION.png`，Prefab 静态检查确认 `MainScreen` 挂载点为空且旧 Page 节点为 0。
-- [x] 生命周期/组合测试覆盖五页循环、重复点击保持当前实例、页面切换、建造页绑定、设置弹窗往返、Main/Battle 往返和页面实例数恒为 1；自动门槛在 `tests/application/ArchitectureBoundary.test.ts`，浏览器往返证据：`docs/evidence/R1-UI-MODULE-BATTLE-ROUNDTRIP.png`。
-- [x] 1280×720 Web Desktop 视觉回归与 Creator Console 0 warning / 0 error 已通过；主界面证据：`docs/evidence/R1-UI-MODULE-MAIN-1280x720.png`，Battle 新会话和返回主界面均为 0 warning / 0 error。
+- [x] `MainPageRouter` 改为五个持久页面 Node 引用，增加中文 Inspector 预览枚举；`UIRootController` 支持编辑器模式枚举实时切换；`MainSceneBootstrap` 直接持久引用 `BuildPageController`。
+- [x] 创作工具预检收敛为 `UIRoot`、`MainScreen`、`BattleHUD`、`BuildOptionCard`、`PowerRoomRow` 五个正式 UI Prefab；扩展只公开 `create-or-update-scene` 一个场景消息，由三个固定分支执行分阶段 recording、失败取消和唯一 UIRoot 校验。
+- [x] MainScreen 页面预览改为直接打开源 Prefab，按钮状态与视觉绑定入口指向 MainScreen；旧动态页面挂载/销毁入口已从运行时代码移除。
+- [x] UI 收敛结果已保存五个 Prefab：MainScreen 持久包含五页、公共面板和导航贴图；UIRoot/MainScreen 组合已在编辑器中成功保存；旧单用途 Prefab 与 `SettingsPopup.ts` 已删除。证据：`docs/evidence/R1-UI-migration-backup-20260816.md`。
+- [x] 生命周期/组合测试覆盖五页切换、重复点击、设置开关、建造页启停、卡片缓存、能源行动态增删和 Main/Battle 往返；BootScene-started Web Desktop build 在 1280×720 CSS 视口下 Console 0 warning / 0 error。证据：`docs/evidence/R1-UI-migration-backup-20260816.md`。

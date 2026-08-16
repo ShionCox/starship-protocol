@@ -31,13 +31,15 @@ test('Main 与 Battle 都通过持久引用绑定共享界面组件', () => {
   assert.doesNotMatch(battle, /getComponentsInChildren\(RoomView\)/);
 });
 
-test('UI Prefab 与贴图统一位于 assets/ui，领域 Prefab 保持原目录', () => {
+test('UI Prefab 目标白名单与 Creator 迁移门槛统一位于 assets/ui', () => {
   const uiPrefabs = [
-    'UIRoot', 'MainScreen', 'BattleHUD', 'MainMenuPage', 'GalaxyMapPage', 'ShipMainPage', 'BuildPage', 'CrewPage',
-    'PowerPanel', 'CrewStatusPanel', 'WorldContextMenu', 'DemolitionConfirmDialog', 'OfflineSettlementDialog',
-    'SettingsPopup', 'PowerRoomRow', 'BuildOptionCard',
+    'UIRoot', 'MainScreen', 'BattleHUD', 'BuildOptionCard', 'PowerRoomRow',
   ];
   for (const name of uiPrefabs) assert.equal(existsSync(`assets/ui/prefabs/${name}.prefab`), true, `${name} 未迁移到 UI Prefab 目录`);
+  assert.equal(existsSync('extensions/starship-editor-tools/src/scene/ui-prefab-migration.ts'), false);
+  for (const name of ['MainMenuPage', 'GalaxyMapPage', 'ShipMainPage', 'BuildPage', 'CrewPage', 'PowerPanel', 'CrewStatusPanel', 'WorldContextMenu', 'DemolitionConfirmDialog', 'OfflineSettlementDialog', 'SettingsPopup']) {
+    assert.equal(existsSync(`assets/ui/prefabs/${name}.prefab`), false, `${name} 旧 Prefab 未删除`);
+  }
   assert.equal(existsSync('assets/prefabs/UIRoot.prefab'), false);
   assert.equal(existsSync('assets/textures/ui'), false);
   assert.equal(existsSync('assets/ui/textures/buttons'), true);
@@ -48,15 +50,14 @@ test('主场景和战斗场景由编辑器公开 set-property 持久定位世界
   const main = readFileSync('assets/scripts/bootstrap/MainSceneBootstrap.ts', 'utf8');
   const battle = readFileSync('assets/scripts/bootstrap/BattleSceneBootstrap.ts', 'utf8');
   const foundation = readFileSync('extensions/starship-editor-tools/src/scene/foundation-prefab-authoring.ts', 'utf8');
-  assert.equal(foundation.match(/setNodeLocalPosition\(scene, worldRoot\.uuid as string, 0, 0, 0\)/g)?.length, 2);
+  assert.doesNotMatch(foundation, /setNodeLocalPosition|setNodeLocalScale/);
   assert.match(foundation, /MAIN_SCREEN_PREFAB_URL/);
   assert.match(foundation, /ensureCanonicalUiRootModules/);
   assert.doesNotMatch(foundation, /ensureUiRootModuleInstances/);
   assert.match(foundation, /ensureBuildOptionCardPrefab/);
   assert.match(foundation, /ensureExistingDomainPrefabComponent/);
   assert.doesNotMatch(foundation, /executeComponentMethod\((?:pageRouter|powerPanel)\.uuid, 'ensureAuthoringPrefabStructure'/);
-  assert.match(foundation, /scene\.setProperty\(nodeUuid, '_lpos', \{ type: 'cc\.Vec3'/);
-  assert.match(foundation, /setNodeLocalScale\(scene, shipView\.nodeUuid, 1\.7, 1\.7, 1\)/);
+  assert.match(foundation, /export async function createOrUpdateScene/);
   assert.match(foundation, /MAIN_HUD_FRAME_TEXTURE_URL = `\$\{UI_TEXTURE_DIRECTORY\}\/main-hud-frame-v2\.png`/);
   assert.doesNotMatch(foundation, /db:\/\/assets\/prefabs\/\$\{assetName\}\.prefab/);
   assert.match(foundation, /reimportAsset\?\.\(MAIN_HUD_FRAME_TEXTURE_URL\)/);
@@ -82,10 +83,10 @@ test('共享 UIRoot 提供主页面切换和 Battle 往返入口', () => {
   assert.match(battleHud, /director\.loadScene\('MainScene'/);
   assert.match(readFileSync('assets/scripts/bootstrap/MainSceneBootstrap.ts', 'utf8'), /director\.preloadScene\('BattleScene'/);
   assert.match(uiRoot, /this\.node\.setSiblingIndex\(Math\.max\(0, parent\.children\.length - 1\)\)/);
-  assert.match(router, /type: Prefab/);
-  assert.match(router, /instantiate\(prefab\)/);
-  assert.match(router, /previousPage\.destroy\(\)/);
-  assert.match(router, /bindPageMount/);
+  assert.match(router, /type: Node/);
+  assert.match(router, /executeInEditMode/);
+  assert.match(router, /编辑器预览页面/);
+  assert.doesNotMatch(router, /instantiate\(|\.destroy\(\)|bindPageMount|getActivePageRoot/);
   assert.match(router, /refreshSerializedReferences/);
   assert.doesNotMatch(router, /ensureAuthoringPrefabStructure|new Node\(|addComponent\(/);
   assert.doesNotMatch(battleHud, /ensureAuthoringPrefabStructure|new Node\(|addComponent\(/);
@@ -93,28 +94,33 @@ test('共享 UIRoot 提供主页面切换和 Battle 往返入口', () => {
   assert.match(router, /this\.crewStatusPanel\.node\.active = pageId === 'MAIN_MENU' \|\| pageId === 'SHIP' \|\| pageId === 'CREW'/);
   assert.match(router, /pageBeforeSettings/);
   const foundation = readFileSync('extensions/starship-editor-tools/src/scene/foundation-prefab-authoring.ts', 'utf8');
-  assert.match(foundation, /SettingsPopup\.prefab/);
-  assert.match(foundation, /setNodeReference\(scene, (?:pageRouter|refreshedPageRouter)\.target, 'settingsPopup'/);
+  assert.doesNotMatch(foundation, /SettingsPopup\.prefab|WorldContextMenu\.prefab|DemolitionConfirmDialog\.prefab|OfflineSettlementDialog\.prefab/);
+  assert.doesNotMatch(foundation, /setNodeReference\(scene, pageRouter\.target, 'settingsPopup'/);
+  assert.match(foundation, /MainPageRouter 的公共面板按持久中文节点解析/);
+  assert.doesNotMatch(router, /@property\(\{ type: (?:PowerPanel|CrewStatusPanel).*\n\s*public (?:powerPanel|crewStatusPanel)/);
 });
 
-test('主页面只保存 Prefab 引用，切页生命周期保持单实例并回滚', () => {
+test('主页面只保存五个持久节点引用，切页只切换 active', () => {
   const router = readFileSync('assets/scripts/presentation/MainPageRouter.ts', 'utf8');
   const bootstrap = readFileSync('assets/scripts/bootstrap/MainSceneBootstrap.ts', 'utf8');
   const uiRoot = readFileSync('assets/scripts/presentation/UIRootController.ts', 'utf8');
-  assert.match(router, /public pageHost: Node \| null/);
-  assert.match(router, /public bindPageMount\(handler: MainPageMountHandler \| null\)/);
-  assert.match(router, /public getActivePageRoot\(\): Node \| null/);
-  assert.match(router, /this\.pageHost\.addChild\(nextPage\)/);
-  assert.match(router, /nextPage\?\.destroy\(\)/);
-  assert.match(router, /pageMountHandler\?\.\(previousPageId, null\)/);
-  assert.match(router, /clearPageHost\(\)/);
-  assert.doesNotMatch(router, /public (mainMenuPage|galaxyMapPage|shipPage|buildPage|crewPage): Node \| null/);
-  assert.doesNotMatch(bootstrap, /public buildPageController/);
-  assert.match(bootstrap, /handlePageMount\(pageId: MainPageId, pageRoot: Node \| null\)/);
-  assert.match(bootstrap, /pageRoot\.getComponent\(BuildPageController\)/);
+  for (const field of ['mainMenuPage', 'galaxyMapPage', 'shipPage', 'buildPage', 'crewPage']) assert.match(router, new RegExp(`public ${field}: Node \\| null`));
+  assert.match(router, /for \(const \[id, node\] of this\.pageNodes\(\)\) node\.active = id === pageId/);
+  assert.doesNotMatch(router, /public (mainMenuPage|galaxyMapPage|shipPage|buildPage|crewPage)Prefab/);
+  assert.match(bootstrap, /public buildPageController: BuildPageController \| null/);
+  assert.doesNotMatch(bootstrap, /bindPageMount|handlePageMount|pageRoot\.getComponent/);
   assert.match(uiRoot, /mainContentRoot\.active = this\.mode === 0/);
   assert.match(uiRoot, /battleContentRoot\.active = this\.mode === 1/);
+  assert.match(uiRoot, /executeInEditMode/);
   assert.doesNotMatch(uiRoot, /ensureAuthoringPrefabStructure|new Node\(|addComponent\(/);
+});
+
+test('能源面板从持久容器重建运行时行缓存，不序列化自定义组件数组', () => {
+  const panel = readFileSync('assets/scripts/presentation/PowerPanel.ts', 'utf8');
+  const foundation = readFileSync('extensions/starship-editor-tools/src/scene/foundation-prefab-authoring.ts', 'utf8');
+  assert.doesNotMatch(panel, /@property\(\{ type: \[PowerRoomRow\]/);
+  assert.match(panel, /this\.roomRows = this\.getAttachedRoomRows\(\)/);
+  assert.doesNotMatch(foundation, /setProperty\(power, 'roomRows'/);
 });
 
 test('主导航文字统一使用清晰的屏幕空间样式', () => {
@@ -190,7 +196,7 @@ test('Web Desktop 使用占满视口的 16:9 正式模板', () => {
   }
 });
 
-test('P8 收口保留离线摘要、拆除确认和页面 Prefab 隔离入口', () => {
+test('P8 收口保留离线摘要、拆除确认并提供 UI 三层入口', () => {
   const port = readFileSync('assets/scripts/application/PlayerStatePort.ts', 'utf8');
   const localPort = readFileSync('assets/scripts/bootstrap/LocalPlayerStatePort.ts', 'utf8');
   const bootstrap = readFileSync('assets/scripts/bootstrap/MainSceneBootstrap.ts', 'utf8');
@@ -206,12 +212,11 @@ test('P8 收口保留离线摘要、拆除确认和页面 Prefab 隔离入口', 
   assert.match(bootstrap, /view\.node\.active = false/);
   assert.doesNotMatch(offlineDialog, /ensureAuthoringPrefabStructure|getComponent\(Graphics\)|addComponent\(Graphics\)/);
   assert.match(offlineDialog, /建造地板.*建造房间.*拆除地板.*拆除房间/s);
-  assert.match(foundation, /WORLD_CONTEXT_MENU_PREFAB_URL/);
-  assert.match(foundation, /DEMOLITION_DIALOG_PREFAB_URL/);
-  assert.match(foundation, /OFFLINE_SETTLEMENT_PREFAB_URL/);
   assert.match(foundation, /preflightUiFoundationPrefabs/);
-  assert.doesNotMatch(foundation, /createUiRootPrefab|ensureDialogNode|createPlainChild/);
-  assert.match(main, /async previewPage\(page: AuthoringPageId\)/);
+  assert.doesNotMatch(foundation, /SettingsPopup\.prefab|WorldContextMenu\.prefab|DemolitionConfirmDialog\.prefab|OfflineSettlementDialog\.prefab/);
+  assert.equal(existsSync('extensions/starship-editor-tools/src/scene/ui-prefab-migration.ts'), false);
+  assert.match(main, /async createOrUpdateScene\(kind: SceneSkeletonKind\)/);
+  assert.doesNotMatch(main, /previewPage|migrateUiPrefabs|rebuildP8StarterShip/);
 });
 
 test('Creator 编译兼容施工到场工程师集合', () => {

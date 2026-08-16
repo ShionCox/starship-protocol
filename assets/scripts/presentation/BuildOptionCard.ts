@@ -84,8 +84,11 @@ export class BuildOptionCard extends Component {
   }
 
   protected onEnable(): void {
-    if (this.button === null || this.preview === null || this.nameLabel === null || this.detailLabel === null || this.statusLabel === null) {
-      error('建造卡片 Prefab 缺少 Button、预览图或文字引用，运行时不会重建卡片。');
+    // 迁移前的卡片资源可能只有 Graphics 背板；按钮状态会在 Creator
+    // 升级共享基础时补齐，但缺少 Button 不应阻断持久卡片的预览和拖拽。
+    // 预览、名称、详情和状态是卡片可用的最小视觉引用，缺少它们才停止接线。
+    if (this.preview === null || this.nameLabel === null || this.detailLabel === null || this.statusLabel === null) {
+      error('建造卡片 Prefab 缺少预览图或文字引用，运行时不会重建卡片。');
       return;
     }
     this.node.on(Node.EventType.MOUSE_DOWN, this.handleMouseDown, this);

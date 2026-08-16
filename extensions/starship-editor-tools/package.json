@@ -127,29 +127,8 @@
       "create-ship-instance": {
         "methods": ["createShipInstance"]
       },
-      "initialize-scene-skeleton": {
-        "methods": ["initializeSceneSkeleton"]
-      },
-      "create-foundation-prefabs": {
-        "methods": ["createFoundationPrefabs"]
-      },
-      "rebuild-p8-starter-ship": {
-        "methods": ["rebuildP8StarterShip"]
-      },
-      "mount-shared-ui": {
-        "methods": ["mountSharedUi"]
-      },
-      "wire-scene-foundation": {
-        "methods": ["wireSceneFoundation"]
-      },
-      "preview-page": {
-        "methods": ["previewPage"]
-      },
-      "open-page-prefab": {
-        "methods": ["openPagePrefab"]
-      },
-      "configure-p8-voxel-demo-scene": {
-        "methods": ["configureP8VoxelDemoScene"]
+      "create-or-update-scene": {
+        "methods": ["createOrUpdateScene"]
       }
     }
   }

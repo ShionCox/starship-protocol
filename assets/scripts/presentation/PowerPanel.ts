@@ -52,7 +52,8 @@ export class PowerPanel extends Component {
   @property({ type: Label, displayName: '状态提示', tooltip: '显示能源分配成功、失败和存档状态。', group: '显示' })
   public statusLabel: Label | null = null;
 
-  @property({ type: [PowerRoomRow], displayName: '能源房间行', tooltip: '按顺序引用面板中的能源房间行预制体实例。', group: '房间' })
+  // 运行时缓存始终从能源行容器的持久子节点重建。不要序列化自定义组件数组：
+  // Creator 3.8.8 的 Scene set-property 无法稳定解码这种 Prefab 跨层引用数组。
   public roomRows: PowerRoomRow[] = [];
 
   @property({ type: Prefab, displayName: '能源行模板', tooltip: '玩家新建耗能房间时实例化的 PowerRoomRow Prefab。', group: '房间' })

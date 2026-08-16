@@ -89,7 +89,7 @@ const ACTION_IDS: readonly WorldContextActionId[] = [
   'TOGGLE_PATROL',
 ];
 
-// 菜单框和子按钮尺寸由 WorldContextMenu.prefab 持久保存；运行时只更新状态和根位置。
+// 菜单框和子按钮尺寸由 UIRoot 弹窗层的持久普通节点保存；运行时只更新状态和根位置。
 
 /**
  * 主场景的临时选择与右键菜单协调器。选择、悬浮和菜单位置都不是权威状态，

@@ -8,7 +8,6 @@ import {
   CSV_CONFIG_CHANGE_MESSAGE,
   AUTHORING_BATCH_START_MESSAGE,
   AUTHORING_BATCH_END_MESSAGE,
-  UI_PREFAB_DIRECTORY,
 } from './constants';
 import { ASSET_OPERATION_QUIET_MS, editorAssetDb, getCurrentAuthoringAsset, noteAuthoringAssetOperation, openEditorAsset, waitForAuthoringQuiet } from './shared/editor-asset-db';
 import type { AssetDbPort } from './shared/editor-asset-db';
@@ -20,16 +19,10 @@ import {
   getRoomCatalog,
   setRoomCatalog,
 } from './rooms/room-module';
-import { initializeSceneSkeleton } from './scene/scene-skeleton';
 import type { SceneSkeletonKind } from './scene/scene-skeleton';
 import {
-  configureP8VoxelDemoScene,
-  createFoundationPrefabs,
-  mountSharedUi,
+  createOrUpdateScene as createOrUpdateSceneInCreator,
   openAuthoringSceneContext,
-  rebuildP8StarterShip as rebuildP8StarterShipInScene,
-  wireSceneFoundation,
-  UI_ROOT_PREFAB_URL,
 } from './scene/foundation-prefab-authoring';
 import { resolveRoomPlacementTarget } from './rooms/room-scene-authoring';
 import type { SceneNodeTree } from './shared/editor-scene';
@@ -61,15 +54,6 @@ import {
   type RoomInstanceEditRequest,
 } from './rooms/room-csv-authoring';
 import { loadCrewCsvDrafts, loadHullCsvDrafts, saveOrCreateCrewCsvDraft, saveOrCreateHullCsvDraft, toCrewPreviewDto, toHullPreviewDto, type CrewCsvDraft, type HullCsvDraft } from './csv/domain-csv-authoring';
-
-export type AuthoringPageId = 'MAIN_MENU' | 'GALAXY_MAP' | 'SHIP' | 'BUILD' | 'CREW';
-const AUTHORING_PAGE_PREFABS: Readonly<Record<AuthoringPageId, string>> = {
-  MAIN_MENU: `${UI_PREFAB_DIRECTORY}/MainMenuPage.prefab`, GALAXY_MAP: `${UI_PREFAB_DIRECTORY}/GalaxyMapPage.prefab`,
-  SHIP: `${UI_PREFAB_DIRECTORY}/ShipMainPage.prefab`, BUILD: `${UI_PREFAB_DIRECTORY}/BuildPage.prefab`, CREW: `${UI_PREFAB_DIRECTORY}/CrewPage.prefab`,
-};
-const AUTHORING_PAGE_ROUTER_METHOD: Readonly<Record<AuthoringPageId, string>> = {
-  MAIN_MENU: 'showMainMenu', GALAXY_MAP: 'showGalaxyMap', SHIP: 'showShip', BUILD: 'showBuild', CREW: 'showCrew',
-};
 
 export interface AuthoringState {
   readonly selection: AuthoringSelection;
@@ -110,92 +94,14 @@ export const methods = {
     await openEditorAsset(prefabUrl);
     await previewMappedPrefab(prefabUrl);
   },
-  async previewPage(page: AuthoringPageId) {
-    const prefabUrl = AUTHORING_PAGE_PREFABS[page];
-    if (prefabUrl === undefined) return { ok: false as const, message: `未知页面：${page}` };
-    try {
-      await openEditorAsset(prefabUrl);
-      await openAuthoringSceneContext(editorSceneQuery, 'MAIN');
-      const wired = await wireSceneFoundation(editorAssetDb, editorSceneQuery, 'MAIN');
-      if (!wired.ok) return wired;
-      await openEditorAsset(UI_ROOT_PREFAB_URL);
-      const classes = editorSceneQuery.queryComponents === undefined ? [] : await editorSceneQuery.queryComponents();
-      const tree = await editorSceneQuery.queryNodeTree();
-      const router = flattenTree(tree).flatMap((node) => (node.components ?? []).map((component) => ({ component })))
-        .find(({ component }) => componentTypeMatches(component, 'MainPageRouter', classes));
-      const uuid = router === undefined ? undefined : getSceneComponentUuid(router.component);
-      if (uuid === undefined) return { ok: false as const, message: 'UIRoot 缺少 MainPageRouter' };
-      await editorSceneQuery.executeComponentMethod(uuid, AUTHORING_PAGE_ROUTER_METHOD[page], []);
-      return { ok: true as const, message: `已在隔离 UIRoot Prefab 中预览${page}页面；重新连接场景引用会恢复主菜单默认状态` };
-    } catch (cause) { return { ok: false as const, message: `页面预览失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
-  },
-  async openPagePrefab(page: AuthoringPageId) {
-    const prefabUrl = AUTHORING_PAGE_PREFABS[page];
-    if (prefabUrl === undefined) return { ok: false as const, message: `未知页面：${page}` };
-    try { await openEditorAsset(prefabUrl); return { ok: true as const, message: `已打开${page}页面 Prefab` }; }
-    catch (cause) { return { ok: false as const, message: `打开页面 Prefab 失败：${cause instanceof Error ? cause.message : String(cause)}` }; }
-  },
   async refreshAuthoringState() {
     await refreshEditorCatalogsNow();
     return await getAuthoringState();
   },
-  async initializeSceneSkeleton(kind: SceneSkeletonKind) {
-    const result = await initializeSceneSkeleton(editorSceneQuery, kind);
-    if (result.ok) await saveAuthoringScene();
-    return result;
-  },
-  async createFoundationPrefabs(kind: SceneSkeletonKind) {
+  async createOrUpdateScene(kind: SceneSkeletonKind) {
     beginAuthoringBatch();
     try {
-      return await createFoundationPrefabs(editorAssetDb, editorSceneQuery, kind);
-    } finally {
-      await endAuthoringBatch();
-    }
-  },
-  async mountSharedUi(kind: SceneSkeletonKind) {
-    return await mountSharedUi(editorAssetDb, editorSceneQuery, kind);
-  },
-  async wireSceneFoundation(kind: SceneSkeletonKind) {
-    try {
-      await openAuthoringSceneContext(editorSceneQuery, kind);
-      return await wireSceneFoundation(editorAssetDb, editorSceneQuery, kind);
-    } catch (cause) {
-      return { ok: false, message: cause instanceof Error ? cause.message : String(cause) };
-    }
-  },
-  async configureP8VoxelDemoScene() {
-    return await configureP8VoxelDemoScene(editorAssetDb, editorSceneQuery);
-  },
-  /**
-   * 通过同一批公开 Asset DB/Scene API 全新重建 P8.3 资源和标准新手船。
-   * 视觉绑定由本入口注入，foundation 模块不反向依赖 PSS 领域模块。
-   */
-  async rebuildP8StarterShip() {
-    beginAuthoringBatch();
-    try {
-      return await rebuildP8StarterShipInScene(editorAssetDb, editorSceneQuery, {
-        bindRoomAppearances: async () => {
-          const result = await bindFirstPssRoomAppearances(
-            editorAssetDb,
-            editorSceneQuery,
-            openEditorAsset,
-            async () => { await saveAuthoringScene(); },
-          );
-          return result;
-        },
-        bindCrewAppearances: async () => {
-          const result = await bindFirstPssCrewAppearances(
-            editorAssetDb,
-            editorSceneQuery,
-            openEditorAsset,
-            async () => { await saveAuthoringScene(); },
-          );
-          return result;
-        },
-        bindHullAppearances: async () => await bindStarterHullAppearancesForRebuild(),
-      });
-    } catch (cause) {
-      return { ok: false, message: `P8.3 全新重建失败：${cause instanceof Error ? cause.message : String(cause)}` };
+      return await createOrUpdateSceneInCreator(editorAssetDb, editorSceneQuery, kind);
     } finally {
       await endAuthoringBatch();
     }
@@ -208,19 +114,26 @@ export const methods = {
   },
   /** 使用 Creator 公开原生文件选择器一次导入完整编辑器 CSV bundle。 */
   async importCsvConfigBundle() {
-    const dialog = (Editor as unknown as { Dialog?: { openFile?: (options: Record<string, unknown>) => Promise<unknown> } }).Dialog;
-    if (dialog?.openFile === undefined) return { ok: false as const, message: '当前 Creator 不提供公开 CSV 文件选择器' };
-    const selected = await dialog.openFile({
-      title: '选择完整 P8.3 CSV 配置包',
-      filters: [{ name: 'CSV', extensions: ['csv'] }],
-      properties: ['openFile', 'multiSelections'],
-    });
+    const dialog = (Editor as unknown as { Dialog?: { select?: (options: Record<string, unknown>) => Promise<unknown> } }).Dialog;
+    if (dialog?.select === undefined) return { ok: false as const, message: '当前 Creator 不提供公开 CSV 文件选择器' };
+    let selected: unknown;
+    try {
+      selected = await dialog.select({
+        title: '选择完整 P8.3 CSV 配置包',
+        path: Editor.Project.path,
+        type: 'file',
+        multi: true,
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      });
+    } catch (cause) {
+      return { ok: false as const, message: `打开 CSV 文件选择器失败：${cause instanceof Error ? cause.message : String(cause)}` };
+    }
     const paths = Array.isArray(selected)
       ? selected.filter((value): value is string => typeof value === 'string')
       : (typeof selected === 'object' && selected !== null && Array.isArray((selected as { filePaths?: unknown }).filePaths)
         ? ((selected as { filePaths: unknown[] }).filePaths.filter((value): value is string => typeof value === 'string'))
         : []);
-    if (paths.length === 0) return { ok: false as const, message: '已取消 CSV 导入' };
+    if (paths.length === 0) return { ok: false as const, cancelled: true as const, message: '已取消 CSV 导入' };
     const names = new Set(paths.map((file) => basename(file)));
     const expected = new Set<string>(EDITOR_CSV_CONFIG_TABLES);
     if (paths.length !== expected.size || names.size !== expected.size || [...expected].some((name) => !names.has(name))) {
@@ -692,44 +605,6 @@ async function getAuthoringState(): Promise<AuthoringState> {
       hulls: getHullCatalog(),
       warnings: [...catalogWarnings, ...crewCatalogWarnings, ...hullCatalogWarnings],
     };
-  }
-}
-
-/** P8.3 编排专用 HullAppearance 绑定；调用方已处于 authoring batch。 */
-async function bindStarterHullAppearancesForRebuild(): Promise<{ readonly ok: boolean; readonly message: string; readonly bound: readonly string[] }> {
-  let result: { readonly ok: boolean; readonly message: string; readonly bound: readonly string[] } = {
-    ok: false,
-    message: '尚未执行新手船外观绑定',
-    bound: [],
-  };
-  try {
-    const manifestText = await editorAssetDb.readFile('db://assets/textures/pss/manifest.json');
-    const manifest = JSON.parse(manifestText) as PssManifest;
-    const selected = manifest.entries.filter((entry) => FIRST_HULL_VISUALS.some((item) => item.visualId === entry.visualId));
-    if (selected.length !== FIRST_HULL_VISUALS.length) {
-      return { ok: false, message: 'PSS manifest 缺少 4324/261 船体白名单条目', bound: [] };
-    }
-    const imported = await createPssImportPort({ sourceRoot: manifest.sourceRoot, targetRoot: Editor.Project.path }).importManifest({ ...manifest, entries: selected });
-    if (!imported.every((entry) => entry.ok)) {
-      return { ok: false, message: imported.map((entry) => `${entry.assetId}：${entry.message}`).join('；'), bound: [] };
-    }
-    await Editor.Message.request('asset-db', 'refresh-asset', 'db://assets/textures/pss/ship');
-    for (const item of FIRST_HULL_VISUALS) {
-      const url = `db://${item.target}`;
-      await waitForImportedTexture2D(editorAssetDb, url);
-    }
-    await openEditorAsset('db://assets/prefabs/ShipView.prefab');
-    result = await bindFirstHullAppearances(editorAssetDb, editorSceneQuery);
-    if (result.ok) await saveAuthoringScene();
-    return result;
-  } catch (cause) {
-    return { ok: false, message: cause instanceof Error ? cause.message : String(cause), bound: result.bound };
-  } finally {
-    try {
-      await openAuthoringSceneContext(editorSceneQuery, 'MAIN');
-    } catch {
-      // foundation 编排器会把恢复失败呈现为当前步骤失败；这里不覆盖原始错误。
-    }
   }
 }
 

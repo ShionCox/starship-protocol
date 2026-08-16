@@ -27,7 +27,8 @@ export interface AssetDbPort {
   copyAsset(sourceUrl: string, targetUrl: string): Promise<CreatedAssetInfo | null>;
   deleteAsset(url: string): Promise<CreatedAssetInfo | null>;
   queryAssets(options?: { readonly extname?: string; readonly pattern?: string }): Promise<readonly AssetInfo[]>;
-  queryDependencies(urlOrUuid: string): Promise<readonly string[]>;
+  /** 查询反向引用，避免为了删除预检而遍历整个 Asset DB。 */
+  queryUsers(urlOrUuid: string, type?: 'asset' | 'script' | 'all'): Promise<readonly string[]>;
   queryInfo(urlOrUuid: string): Promise<AssetInfo | null>;
   queryPath?(urlOrUuid: string): Promise<string | null>;
   readFile(urlOrUuid: string): Promise<string>;
@@ -265,8 +266,8 @@ export const editorAssetDb: AssetDbPort = {
   async queryAssets(options) {
     return await Editor.Message.request('asset-db', 'query-assets', options) as readonly AssetInfo[];
   },
-  async queryDependencies(urlOrUuid) {
-    return await Editor.Message.request('asset-db', 'query-asset-dependencies', urlOrUuid, 'all') as readonly string[];
+  async queryUsers(urlOrUuid, type = 'all') {
+    return await Editor.Message.request('asset-db', 'query-asset-users', urlOrUuid, type) as readonly string[];
   },
   async queryInfo(urlOrUuid) {
     if (urlOrUuid.trim() === '') return null;

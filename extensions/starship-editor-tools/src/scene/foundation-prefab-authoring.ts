@@ -13,6 +13,7 @@ import {
   getSceneComponentTarget,
   getSceneComponentUuid,
   openEditorSceneAsset,
+  readSceneReferenceUuid,
   saveAuthoringScene,
   type SceneComponentClassInfo,
   type SceneComponentInfo,
@@ -31,11 +32,6 @@ export const SHIP_VIEW_PREFAB_URL = 'db://assets/prefabs/ShipView.prefab';
 export const UI_ROOT_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/UIRoot.prefab`;
 export const MAIN_SCREEN_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/MainScreen.prefab`;
 export const BATTLE_HUD_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/BattleHUD.prefab`;
-export const POWER_PANEL_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/PowerPanel.prefab`;
-export const CREW_STATUS_PANEL_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/CrewStatusPanel.prefab`;
-export const WORLD_CONTEXT_MENU_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/WorldContextMenu.prefab`;
-export const DEMOLITION_DIALOG_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/DemolitionConfirmDialog.prefab`;
-export const OFFLINE_SETTLEMENT_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/OfflineSettlementDialog.prefab`;
 export const MAIN_HUD_FRAME_TEXTURE_URL = `${UI_TEXTURE_DIRECTORY}/main-hud-frame-v2.png`;
 const NAV_BUTTON_TEXTURE_URLS = [
   `${UI_TEXTURE_DIRECTORY}/buttons/nav-v2-normal.png`,
@@ -71,21 +67,11 @@ export const CONSTRUCTION_GHOST_PREFAB_URL = 'db://assets/prefabs/ConstructionGh
 export const BUILD_OPTION_CARD_PREFAB_URL = `${UI_PREFAB_DIRECTORY}/BuildOptionCard.prefab`;
 export const STAIRS_PREFAB_URL = 'db://assets/prefabs/StairsRoom.prefab';
 export const SOLDIER_PREFAB_URL = 'db://assets/prefabs/SoldierCrew.prefab';
-const LEGACY_CREW_PREFAB_URL = 'db://assets/prefabs/CrewMember.prefab';
 const AUTHORING_SCENES = {
   BOOT: { url: 'db://assets/scenes/BootScene.scene', sceneName: 'BootScene', bootstrap: 'BootSceneBootstrap' },
   MAIN: { url: 'db://assets/scenes/MainScene.scene', sceneName: 'MainScene', bootstrap: 'MainSceneBootstrap' },
   BATTLE: { url: 'db://assets/scenes/BattleScene.scene', sceneName: 'BattleScene', bootstrap: 'BattleSceneBootstrap' },
 } as const;
-export const PAGE_PREFABS = [
-  ['MainMenuPage', '主菜单页面'],
-  ['GalaxyMapPage', '星图页面'],
-  ['ShipMainPage', '飞船页面'],
-  ['BuildPage', '建造页面'],
-  ['CrewPage', '船员页面'],
-  ['SettingsPopup', '设置弹窗'],
-] as const;
-
 const POWER_ROOM_ROWS = [
   { name: '能源行-激光室', roomId: 'room-laser-1' },
   { name: '能源行-护盾室', roomId: 'room-shield-1' },
@@ -109,15 +95,6 @@ export const P8_STANDARD_STARTER_SHIP = {
 /** 兼容面板/测试使用的简短别名；值仍由上面的唯一布局契约提供。 */
 export const P8_STANDARD_BUILD_TEST_TARGET = P8_STANDARD_STARTER_SHIP.medbayBuildTestTarget;
 
-export interface FoundationRebuildHooks {
-  /** 在 Prefab 公开编辑上下文中重建首批房间外观。 */
-  readonly bindRoomAppearances?: () => Promise<{ readonly ok: boolean; readonly message: string }>;
-  /** 在 Prefab 公开编辑上下文中重建首批船员外观。 */
-  readonly bindCrewAppearances?: () => Promise<{ readonly ok: boolean; readonly message: string }>;
-  /** 导入白名单贴图并重建新手船的持久 HullAppearance。 */
-  readonly bindHullAppearances?: () => Promise<{ readonly ok: boolean; readonly message: string }>;
-}
-
 interface FoundationCreationContext {
   readonly createdAssetUrls: string[];
 }
@@ -131,15 +108,10 @@ export async function openAuthoringSceneContext(scene: SceneQueryPort, kind: Sce
 }
 
 const UI_PREFAB_PRECHECKS: readonly { readonly url: string; readonly component: string; readonly nodes: readonly string[] }[] = [
-  { url: MAIN_SCREEN_PREFAB_URL, component: 'MainPageRouter', nodes: ['主导航栏', '页面挂载点', '界面框架素材', '能源面板', '船员状态面板', '主菜单按钮', '星图按钮', '飞船按钮', '建造按钮', '船员按钮', '设置按钮', '全屏按钮', '进入战斗按钮'] },
+  { url: UI_ROOT_PREFAB_URL, component: 'UIRootController', nodes: ['主界面内容根', '战斗界面内容根', '弹窗层', '提示层', '加载层'] },
+  { url: MAIN_SCREEN_PREFAB_URL, component: 'MainPageRouter', nodes: ['主导航栏', '页面层', '界面框架素材', '能源面板', '船员状态面板', '主菜单页面', '星图页面', '飞船页面', '建造页面', '船员页面', '主菜单按钮', '星图按钮', '飞船按钮', '建造按钮', '船员按钮', '设置按钮', '全屏按钮', '进入战斗按钮'] },
   { url: BUILD_OPTION_CARD_PREFAB_URL, component: 'BuildOptionCard', nodes: ['预览图', '名称', '详情', '状态'] },
-  { url: `${UI_PREFAB_DIRECTORY}/PowerPanel.prefab`, component: 'PowerPanel', nodes: ['能源汇总', '能源进度条', '状态提示', '能源行容器'] },
-  { url: `${UI_PREFAB_DIRECTORY}/CrewStatusPanel.prefab`, component: 'CrewStatusPanel', nodes: ['当前选择', '所在房间', '目标房间', '船员状态', '房间耐久', '船员生命', '维修按钮', '治疗按钮', '状态提示'] },
   { url: BATTLE_HUD_PREFAB_URL, component: 'BattleHUD', nodes: ['我方飞船', '敌方飞船', '战斗状态', '返回主场景按钮'] },
-  { url: WORLD_CONTEXT_MENU_PREFAB_URL, component: 'WorldInteractionController', nodes: ['世界上下文菜单', '禁用原因', ...Array.from({ length: 9 }, (_, index) => `菜单操作-${index + 1}`)] },
-  { url: DEMOLITION_DIALOG_PREFAB_URL, component: 'DemolitionConfirmDialog', nodes: ['标题', '说明', '确认', '取消'] },
-  { url: OFFLINE_SETTLEMENT_PREFAB_URL, component: 'OfflineSettlementDialog', nodes: ['标题', '摘要', '关闭'] },
-  { url: `${UI_PREFAB_DIRECTORY}/SettingsPopup.prefab`, component: 'SettingsPopup', nodes: ['标题', '分辨率', '显示模式', '镜头提示', '关闭提示'] },
   { url: `${UI_PREFAB_DIRECTORY}/PowerRoomRow.prefab`, component: 'PowerRoomRow', nodes: ['房间名称', '当前能源', '减少按钮', '增加按钮', '断电按钮'] },
 ];
 
@@ -162,7 +134,6 @@ async function preflightUiFoundationPrefabs(assetDb: AssetDbPort, scene: SceneQu
   if (scene.queryComponents === undefined) return;
   const requiredPrefabUrls = new Set<string>([
     UI_ROOT_PREFAB_URL,
-    ...PAGE_PREFABS.map(([name]) => `${UI_PREFAB_DIRECTORY}/${name}.prefab`),
     ...UI_PREFAB_PRECHECKS.map((item) => item.url),
   ]);
   for (const url of requiredPrefabUrls) {
@@ -183,13 +154,18 @@ async function preflightUiFoundationPrefabs(assetDb: AssetDbPort, scene: SceneQu
 }
 
 /** 生成正式的共享 UI、页面和飞船表现 Prefab；所有写入均经 Asset DB 与 Scene 公共接口。 */
-export async function createFoundationPrefabs(assetDb: AssetDbPort, scene: SceneQueryPort, returnToKind?: SceneSkeletonKind): Promise<FoundationAuthoringResult> {
+async function ensureFoundationAssets(assetDb: AssetDbPort, scene: SceneQueryPort, returnToKind?: SceneSkeletonKind): Promise<FoundationAuthoringResult> {
   const context: FoundationCreationContext = { createdAssetUrls: [] };
   let result: FoundationAuthoringResult;
+  let phase = '预检五个正式 UI Prefab';
+  const runPhase = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
+    phase = name;
+    return await action();
+  };
   try {
     // UI Prefab 是布局唯一权威。先完整预检，任何模块、中文节点或核心组件缺失都在
     // 写入前 fail-closed，避免创建一半的领域资源后才发现 UI 资产不可用。
-    await preflightUiFoundationPrefabs(assetDb, scene);
+    await runPhase('预检五个正式 UI Prefab', async () => await preflightUiFoundationPrefabs(assetDb, scene));
     await createBlankPrefab(assetDb, scene, BLANK_NODE_TEMPLATE_URL, context);
     await createBlankPrefab(assetDb, scene, ROOM_TEMPLATE_URL, context);
     await createBlankPrefab(assetDb, scene, CREW_TEMPLATE_URL, context);
@@ -198,19 +174,18 @@ export async function createFoundationPrefabs(assetDb: AssetDbPort, scene: Scene
     await createStairsPrefab(assetDb, scene, context);
     await createSoldierPrefab(assetDb, scene, context);
     await createConvertedPrefab(assetDb, scene, SHIP_VIEW_PREFAB_URL, 'ShipView', 'ensureAuthoringPrefabStructure', context);
-    await configurePowerPanelPrefab(assetDb, scene);
-    await configureMainScreenPrefab(assetDb, scene);
+    await runPhase('校验并保存 MainScreen 持久页面', async () => await configureMainScreenPrefab(scene));
     // 已存在的正式 Prefab 属于设计资产；这里只升级领域表现 Prefab，不重建任何 UI 层级。
     await ensureExistingDomainPrefabComponent(scene, FLOOR_PREFAB_URL, 'FloorView', 'ensureAuthoringPrefabStructure');
     await ensureExistingDomainPrefabComponent(scene, CONSTRUCTION_GHOST_PREFAB_URL, 'ConstructionGhostView', 'ensureAuthoringPrefabStructure');
-    await ensureShipViewP8Components(assetDb, scene);
-    await ensureUiRootP8Components(assetDb, scene);
-    await ensureBuildPageP8Components(assetDb, scene);
-    result = { ok: true, message: '共享 UIRoot 模块、动态页面与 ShipView Prefab 已通过 Creator 公共接口创建或升级' };
+    await runPhase('升级 ShipView 共享表现', async () => await ensureShipViewP8Components(assetDb, scene));
+    await runPhase('校验并保存 UIRoot 三层组合', async () => await ensureUiRootP8Components(assetDb, scene));
+    await runPhase('补齐 MainScreen 视觉与能源行', async () => await ensureMainScreenP8Components(assetDb, scene));
+    result = { ok: true, message: '三层核心 UI Prefab、持久页面与 ShipView Prefab 已通过 Creator 公共接口创建或升级' };
   } catch (cause) {
-    // UIRoot 引用了页面 Prefab，按创建逆序清理，且只清理本次确认不存在后创建的资源。
+    // UIRoot 会引用核心 UI Prefab；按创建逆序清理，且只清理本次确认不存在后创建的资源。
     const rollbackErrors = await rollbackCreatedAssets(assetDb, [...context.createdAssetUrls].reverse());
-    result = { ok: false, message: `${toMessage(cause)}；${describeRollback(rollbackErrors)}` };
+    result = { ok: false, message: `${phase}：${toMessage(cause)}；${describeRollback(rollbackErrors)}` };
   }
   if (returnToKind !== undefined) {
     try {
@@ -222,18 +197,97 @@ export async function createFoundationPrefabs(assetDb: AssetDbPort, scene: Scene
   return result;
 }
 
-/** 建造页只补齐卡片 Prefab 引用；分类、列表和队列布局必须来自已保存 Prefab。 */
-async function ensureBuildPageP8Components(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
+/**
+ * 场景页唯一公开编排入口。每个场景分支都按固定顺序执行同一套可重复步骤；
+ * 新功能必须追加到对应分支，不能再通过面板增加独立按钮或绕过统一队列。
+ */
+export async function createOrUpdateScene(
+  assetDb: AssetDbPort,
+  scene: SceneQueryPort,
+  kind: SceneSkeletonKind,
+): Promise<FoundationAuthoringResult> {
+  // 消息参数来自扩展边界，不能只依赖 TypeScript 联合类型；非法值必须在任何
+  // 场景打开或资源写入前失败，避免把未定义分支误判为战斗界面。
+  const requestedKind = kind as unknown as string;
+  if (requestedKind !== 'BOOT' && requestedKind !== 'MAIN' && requestedKind !== 'BATTLE') {
+    return { ok: false, message: `场景类型无效：${String(requestedKind)}；只允许 BOOT、MAIN、BATTLE` };
+  }
+  const sceneName = kind === 'BOOT' ? '启动界面' : kind === 'MAIN' ? '主界面' : '战斗界面';
+  let stage = '准备';
+  const completed: string[] = [];
+  const run = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
+    stage = name;
+    const result = await action();
+    completed.push(name);
+    return result;
+  };
+  try {
+    await run('保存当前文档', async () => await saveAuthoringScene());
+    await run('打开目标场景', async () => await openAuthoringSceneContext(scene, kind));
+    const skeleton = await run('补齐中文场景骨架', async () => await initializeSceneSkeleton(scene, kind));
+    if (!skeleton.ok) throw new Error(skeleton.message);
+    await run('保存场景骨架', async () => await saveAuthoringScene());
+
+    if (kind === 'BOOT') {
+      const wired = await run('清理启动场景旧英文节点', async () => await connectSceneReferences(assetDb, scene, 'BOOT'));
+      if (!wired.ok) throw new Error(wired.message);
+    } else {
+      const foundation = await run('校验并升级共享基础', async () => await ensureFoundationAssets(assetDb, scene, kind));
+      if (!foundation.ok) throw new Error(foundation.message);
+      await run('重新打开目标场景', async () => await openAuthoringSceneContext(scene, kind));
+      const mounted = await run('补齐共享 UIRoot', async () => await ensureSharedUiMount(assetDb, scene, kind));
+      if (!mounted.ok) throw new Error(mounted.message);
+      await run('重新打开目标场景', async () => await openAuthoringSceneContext(scene, kind));
+      if (kind === 'MAIN') {
+        await run('补齐主场景飞船与标准演示内容', async () => {
+          await ensureP8MainShipInstance(assetDb, scene);
+          const demo = await ensureMainSceneContent(assetDb, scene);
+          if (!demo.ok) throw new Error(demo.message);
+        });
+      } else {
+        const battle = await run('补齐战斗双方飞船', async () => await ensureBattleSceneShips(assetDb, scene));
+        if (!battle.ok) throw new Error(battle.message);
+      }
+      const wired = await run('连接场景持久引用', async () => await connectSceneReferences(assetDb, scene, kind));
+      if (!wired.ok) throw new Error(wired.message);
+    }
+    await run('保存并重开验证', async () => {
+      await saveAuthoringScene();
+      await openAuthoringSceneContext(scene, kind);
+      const reopened = flattenTree(await scene.queryNodeTree());
+      const classes = await queryClasses(scene);
+      const bootstrapType = kind === 'BOOT' ? 'BootSceneBootstrap' : kind === 'MAIN' ? 'MainSceneBootstrap' : 'BattleSceneBootstrap';
+      if (findNodeWithComponent(await scene.queryNodeTree(), bootstrapType, classes) === null) {
+        throw new Error(`重开后缺少 ${bootstrapType}`);
+      }
+      if (kind !== 'BOOT' && findAllNodesWithComponent(await scene.queryNodeTree(), 'UIRootController', classes).length !== 1) {
+        throw new Error(`${sceneName}重开后必须且只能包含一个 UIRootController`);
+      }
+      if (reopened.length === 0) throw new Error('重开后场景层级为空');
+    });
+    return { ok: true, message: `${sceneName}创建/更新完成；已完成：${completed.join('、')}` };
+  } catch (cause) {
+    await scene.snapshotAbort().catch(() => undefined);
+    return { ok: false, message: `${sceneName}在“${stage}”阶段失败：${toMessage(cause)}；已完成：${completed.join('、') || '无'}；已保存阶段不会伪装成自动回滚` };
+  }
+}
+
+/** MainScreen 只补齐卡片 Prefab 引用；分类、列表和队列布局必须来自持久建造页面节点。 */
+async function ensureMainScreenP8Components(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
   await ensureBuildOptionCardPrefab(assetDb, scene);
-  const buildPageUrl = `${UI_PREFAB_DIRECTORY}/BuildPage.prefab`;
-  await openEditorAsset(buildPageUrl);
-  const editableRoot = await waitForEditablePrefabRoot(scene, buildPageUrl);
-  const controller = await waitForComponentOnNode(scene, editableRoot.uuid as string, 'BuildPageController');
-  if (controller === null) throw new Error(`${buildPageUrl} 缺少 BuildPageController`);
+  await openEditorAsset(MAIN_SCREEN_PREFAB_URL);
+  await bindMainScreenVisualAssets(assetDb, scene);
+  await ensureMainScreenPowerRoomRows(assetDb, scene);
+  const tree = await scene.queryNodeTree();
+  const buildPage = flattenTree(tree).find((node) => node.name === '建造页面');
+  if (buildPage?.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 缺少持久建造页面节点`);
+  const controller = await waitForComponentOnNode(scene, buildPage.uuid, 'BuildPageController');
+  if (controller === null) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 的建造页面缺少 BuildPageController`);
   const cardUuid = await assetDb.queryUuid(BUILD_OPTION_CARD_PREFAB_URL);
-  if (cardUuid === '' || !(await scene.setProperty(controller, 'optionCardPrefab', { type: 'cc.Prefab', uuid: cardUuid }))) {
+  if (cardUuid === '') {
     throw new Error(`无法绑定建筑卡片模板：${BUILD_OPTION_CARD_PREFAB_URL}`);
   }
+  await ensureReference(scene, controller, 'optionCardPrefab', 'cc.Prefab', cardUuid);
   await saveAuthoringScene();
 }
 
@@ -264,15 +318,15 @@ async function ensureBuildOptionCardPrefab(assetDb: AssetDbPort, scene: SceneQue
   }
   if (!(await scene.setProperty(sprite, '_sizeMode', 0))) throw new Error('建筑卡片无法锁定自定义 Sprite 尺寸');
   if (!(await scene.setProperty(sprite, '_type', 0))) throw new Error('建筑卡片无法锁定简单 Sprite');
-  if (!(await scene.setProperty(sprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: normal }))) throw new Error('建筑卡片无法绑定普通态素材');
+  if (await shouldFillReference(scene, sprite, 'spriteFrame', assetDb) && !(await scene.setProperty(sprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: normal }))) throw new Error('建筑卡片无法绑定普通态素材');
   if (!(await scene.setProperty(button, '_transition', 2))) throw new Error('建筑卡片无法切换 Button 三态');
   if (!(await scene.setProperty(button, '_target', { type: 'cc.Node', uuid: root.uuid }))) throw new Error('建筑卡片无法绑定 Button 目标节点');
   for (const [property, uuid] of [['_normalSprite', normal], ['_hoverSprite', hover], ['_pressedSprite', pressed], ['_disabledSprite', disabled]] as const) {
-    if (!(await scene.setProperty(button, property, { type: 'cc.SpriteFrame', uuid }))) throw new Error(`建筑卡片无法绑定 Button 状态：${property}`);
+    if (await shouldFillReference(scene, button, property, assetDb) && !(await scene.setProperty(button, property, { type: 'cc.SpriteFrame', uuid }))) throw new Error(`建筑卡片无法绑定 Button 状态：${property}`);
   }
   if (!(await scene.setProperty(card, 'button', { type: 'cc.Button', uuid: button.uuid }))) throw new Error('建筑卡片无法绑定 Button 引用');
   for (const [property, uuid] of [['normalSprite', normal], ['hoverSprite', hover], ['pressedSprite', pressed], ['disabledSprite', disabled]] as const) {
-    if (!(await scene.setProperty(card, property, { type: 'cc.SpriteFrame', uuid }))) throw new Error(`建筑卡片无法绑定 ${property} 引用`);
+    if (await shouldFillReference(scene, card, property, assetDb) && !(await scene.setProperty(card, property, { type: 'cc.SpriteFrame', uuid }))) throw new Error(`建筑卡片无法绑定 ${property} 引用`);
   }
   await saveAuthoringScene();
 }
@@ -423,19 +477,12 @@ async function ensureUiRootP8Components(assetDb: AssetDbPort, scene: SceneQueryP
   if (rootController === null || interaction === null || battleHud === null || crewStatus === null || pageRouter === null) {
     throw new Error('UIRoot 模块缺少持久控制组件，请在 Creator 中补齐后重试');
   }
-  const hudFrameNode = flattenTree(tree).find((node) => node.name === '界面框架素材');
-  if (hudFrameNode?.uuid === undefined) throw new Error('UIRoot 缺少界面框架素材节点');
-  const hudFrameSprite = getComponentTarget(hudFrameNode, 'cc.Sprite', classes);
-  if (hudFrameSprite === null) throw new Error('界面框架素材节点缺少 cc.Sprite');
-  await assetDb.reimportAsset?.(MAIN_HUD_FRAME_TEXTURE_URL);
-  const hudFrameUuid = await resolveDefaultSpriteFrame(assetDb, MAIN_HUD_FRAME_TEXTURE_URL);
-  if (!(await scene.setProperty(hudFrameSprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: hudFrameUuid }))) throw new Error(`无法绑定主界面框架素材：${MAIN_HUD_FRAME_TEXTURE_URL}`);
-  await bindMainUiButtonStates(assetDb, scene);
   const popupRoot = flattenTree(tree).find((node) => node.name === '弹窗层');
-  const settingsPopupNode = popupRoot?.children?.find((node) => node.name === '设置弹窗' || node.name === 'SettingsPopup');
-  if (settingsPopupNode?.uuid === undefined) throw new Error('UIRoot 模块化后设置弹窗实例不可用');
-  await setNodeReference(scene, pageRouter.target, 'settingsPopup', settingsPopupNode.uuid);
-  await ensureExistingPowerRoomRows(assetDb, scene, false);
+  const settingsPopupNode = popupRoot?.children?.find((node) => node.name === '设置弹窗');
+  if (settingsPopupNode?.uuid === undefined) throw new Error('UIRoot 缺少持久设置节点');
+  // MainPageRouter 的公共面板按持久中文节点解析，不再序列化跨 Prefab 的
+  // 自定义组件引用；这会让 Creator 在本次保存时清除旧 TargetOverrideInfo，
+  // 避免后续 set-property 进入 3.8.8 的 decodePatch 坏分支。
   await saveAuthoringScene();
 }
 
@@ -452,18 +499,17 @@ async function ensureCanonicalUiRootModules(assetDb: AssetDbPort, scene: SceneQu
   const requiredModules = [
     [mainRoot, '主界面模块', MAIN_SCREEN_PREFAB_URL],
     [battleRoot, '战斗界面模块', BATTLE_HUD_PREFAB_URL],
-    [popupRoot, '世界交互模块', WORLD_CONTEXT_MENU_PREFAB_URL],
-    [popupRoot, '设置弹窗', `${UI_PREFAB_DIRECTORY}/SettingsPopup.prefab`],
-    [popupRoot, '拆除确认弹窗', DEMOLITION_DIALOG_PREFAB_URL],
-    [popupRoot, '离线结算弹窗', OFFLINE_SETTLEMENT_PREFAB_URL],
   ] as const;
   for (const [parent, nodeName, url] of requiredModules) {
     const uuid = await assetDb.queryUuid(url);
     if (uuid === '') throw new Error(`缺少 UI 模块 Prefab：${url}`);
     const instanceUuids = new Set(await scene.queryNodesByAssetUuid(uuid));
     const matches = (parent.children ?? []).filter((candidate) => candidate.name === nodeName && candidate.uuid !== undefined && instanceUuids.has(candidate.uuid));
-    if (matches.length !== 1) {
-      throw new Error(`UIRoot 缺少规范模块实例：${nodeName}`);
+    if (matches.length !== 1) throw new Error(`UIRoot 缺少规范模块实例：${nodeName}`);
+  }
+  for (const nodeName of ['世界交互模块', '设置弹窗', '拆除确认弹窗', '离线结算弹窗']) {
+    if ((popupRoot.children ?? []).filter((candidate) => candidate.name === nodeName).length !== 1) {
+      throw new Error(`UIRoot 缺少唯一持久节点：${nodeName}`);
     }
   }
 }
@@ -486,36 +532,108 @@ async function ensureExistingDomainPrefabComponent(scene: SceneQueryPort, assetU
   await saveAuthoringScene();
 }
 
-/** 校验 UIRoot 中的能源行实例并保留 PowerRoomRow Prefab 关联；缺失时 fail-closed。 */
-async function ensureExistingPowerRoomRows(assetDb: AssetDbPort, scene: SceneQueryPort, save = true): Promise<void> {
-  if (save) await openEditorAsset(UI_ROOT_PREFAB_URL);
+/** MainScreen 源 Prefab 持久保存能源行模板和代表实例，运行时只按数据增删。 */
+async function ensureMainScreenPowerRoomRows(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
+  const tree = await scene.queryNodeTree();
   const classes = await queryClasses(scene);
-  let tree = await scene.queryNodeTree();
-  const power = findNodeWithComponent(tree, 'PowerPanel', classes);
-  if (power?.node.uuid === undefined) throw new Error(`${UI_ROOT_PREFAB_URL} 缺少 PowerPanel`);
+  const powerNode = flattenTree(tree).find((node) => node.name === '能源面板');
+  if (powerNode?.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 缺少能源面板`);
+  const power = await waitForComponentOnNode(scene, powerNode.uuid, 'PowerPanel');
+  const container = flattenTree(powerNode).find((node) => node.name === '能源行容器');
+  if (power === null || container?.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 缺少能源行容器或 PowerPanel`);
   const rowUuid = await assetDb.queryUuid(`${UI_PREFAB_DIRECTORY}/PowerRoomRow.prefab`);
   if (rowUuid === '') throw new Error('PowerRoomRow.prefab 不存在');
-  if (!(await scene.setProperty(power.target, 'roomRowTemplate', { type: 'cc.Prefab', uuid: rowUuid }))) throw new Error('能源面板无法绑定动态能源行模板');
-  for (const row of POWER_ROOM_ROWS) {
-    tree = await scene.queryNodeTree();
-    const currentPower = findNodeWithComponent(tree, 'PowerPanel', await queryClasses(scene));
-    const matches = currentPower === null ? [] : flattenTree(currentPower.node).filter((node) => node.name === row.name);
-    if (matches.length !== 1 || matches[0]?.uuid === undefined) throw new Error(`能源面板缺少唯一持久行：${row.name}`);
-    const rowTarget = await waitForComponentOnNode(scene, matches[0].uuid, 'PowerRoomRow');
-    if (rowTarget === null) throw new Error(`${row.name} 缺少 PowerRoomRow`);
-    if (!(await scene.setProperty(rowTarget, 'roomInstanceId', row.roomId))) throw new Error(`${row.name} 无法绑定房间实例`);
+  await ensureReference(scene, power, 'roomRowTemplate', 'cc.Prefab', rowUuid);
+
+  const childRows = (container.children ?? []).flatMap((node) => {
+    const target = getComponentTarget(node, 'PowerRoomRow', classes);
+    return target === null ? [] : [{ node, target }];
+  });
+  const hadExistingRows = childRows.length > 0;
+  const rowsByName = new Map<string, { readonly node: SceneNodeTree; readonly target: SceneComponentTarget }>();
+  const rowsById = new Map<string, { readonly node: SceneNodeTree; readonly target: SceneComponentTarget }>();
+  for (const found of childRows) {
+    const name = found.node.name?.trim();
+    if (name === undefined || name === '') throw new Error('能源行容器中存在未命名能源行');
+    if (rowsByName.has(name)) throw new Error(`能源行容器中存在重复能源行：${name}`);
+    rowsByName.set(name, found);
+    const id = await readAuthoringProperty(scene, found.target, 'roomInstanceId');
+    if (typeof id === 'string' && id.trim() !== '') {
+      const normalizedId = id.trim();
+      if (rowsById.has(normalizedId)) throw new Error(`能源行容器中存在重复房间实例标识：${normalizedId}`);
+      rowsById.set(normalizedId, found);
+    }
   }
-  if (save) await saveAuthoringScene();
+  if (hadExistingRows && flattenTree(container).every((node) => getComponentTarget(node, 'cc.Layout', classes) === null)) {
+    throw new Error('能源行容器已有子节点但没有 Layout；为保护手工布局，请先在 Creator 中明确选择布局方式');
+  }
+
+  const representativeRows: SceneComponentTarget[] = [];
+  for (const row of POWER_ROOM_ROWS) {
+    let found = rowsByName.get(row.name);
+    const byId = rowsById.get(row.roomId);
+    if (byId !== undefined && (found === undefined || byId.target.uuid !== found.target.uuid)) {
+      if (found !== undefined) throw new Error(`${row.name} 与房间实例 ${row.roomId} 存在互相冲突的绑定`);
+      found = byId;
+    }
+    let target = found?.target ?? null;
+    if (target === null) {
+      const created = await scene.createNode({ parent: container.uuid, name: row.name, assetUuid: rowUuid, type: 'cc.Prefab', position: { x: 0, y: 0, z: 0 }, unlinkPrefab: false, snapshot: false });
+      if (created?.uuid === undefined) throw new Error(`无法创建持久能源行：${row.name}`);
+      target = await waitForComponentOnNode(scene, created.uuid, 'PowerRoomRow');
+      if (target === null) throw new Error(`${row.name} 缺少 PowerRoomRow`);
+    }
+    const current = await readAuthoringProperty(scene, target, 'roomInstanceId');
+    if (typeof current === 'string' && current.trim() !== '' && current.trim() !== row.roomId) {
+      throw new Error(`${row.name} 已绑定到其他房间实例：${current}`);
+    }
+    if (current !== row.roomId && !(await scene.setProperty(target, 'roomInstanceId', row.roomId))) throw new Error(`${row.name} 无法绑定房间实例`);
+    representativeRows.push(target);
+  }
+
+  const refreshedTree = await scene.queryNodeTree();
+  const refreshedContainer = flattenTree(refreshedTree).find((candidate) => candidate.uuid === container.uuid);
+  if (refreshedContainer === undefined) throw new Error('能源行容器更新后不可编辑');
+  const refreshedClasses = await queryClasses(scene);
+  if (flattenTree(refreshedContainer).every((candidate) => getComponentTarget(candidate, 'cc.Layout', refreshedClasses) === null)) {
+    if (hadExistingRows) throw new Error('能源行容器已有内容但缺少 Layout，已停止以保护手工布局');
+    await scene.createComponent(container.uuid, 'cc.UITransform');
+    await scene.createComponent(container.uuid, 'cc.Layout');
+    const withLayout = flattenTree(await scene.queryNodeTree()).find((candidate) => candidate.uuid === container.uuid);
+    const uiTransform = withLayout === undefined ? null : getComponentTarget(withLayout, 'cc.UITransform', await queryClasses(scene));
+    const layout = withLayout === undefined ? null : getComponentTarget(withLayout, 'cc.Layout', await queryClasses(scene));
+    if (uiTransform === null || layout === null) throw new Error('能源行容器布局组件创建后不可编辑');
+    if (!(await scene.setProperty(uiTransform, '_contentSize', { type: 'cc.Size', value: { width: 232, height: 122 } }))) throw new Error('无法设置能源行容器尺寸');
+    for (const [path, value] of [['_resizeMode', 1], ['_layoutType', 2], ['_spacingY', 4], ['_paddingLeft', 0], ['_paddingRight', 0], ['_paddingTop', 0], ['_paddingBottom', 0]] as const) {
+      if (!(await scene.setProperty(layout, path, value))) throw new Error(`无法设置能源行容器布局：${path}`);
+    }
+  }
+  const finalTree = await scene.queryNodeTree();
+  const finalContainer = flattenTree(finalTree).find((candidate) => candidate.uuid === container.uuid);
+  const finalClasses = await queryClasses(scene);
+  const finalRowUuids = new Set(flattenTree(finalContainer ?? {}).flatMap((candidate) => {
+    const target = getComponentTarget(candidate, 'PowerRoomRow', finalClasses);
+    return target === null ? [] : [target.uuid];
+  }));
+  if (representativeRows.length !== POWER_ROOM_ROWS.length || representativeRows.some((row) => !finalRowUuids.has(row.uuid))) {
+    throw new Error('能源面板缺少三个持久代表能源行');
+  }
 }
 
 /** 在当前 Main/Battle 场景的画布下实例化同一 UIRoot Prefab，并写入中文模式。 */
-export async function mountSharedUi(assetDb: AssetDbPort, scene: SceneQueryPort, kind: SceneSkeletonKind): Promise<FoundationAuthoringResult> {
+async function ensureSharedUiMount(assetDb: AssetDbPort, scene: SceneQueryPort, kind: SceneSkeletonKind): Promise<FoundationAuthoringResult> {
   if (kind === 'BOOT') return { ok: false, message: '启动场景不挂载完整共享界面' };
   const prefabUuid = await assetDb.queryUuid(UI_ROOT_PREFAB_URL);
   if (prefabUuid === '') return { ok: false, message: '请先创建共享 UIRoot Prefab' };
   const classes = await queryClasses(scene);
   const tree = await scene.queryNodeTree();
-  if (findNodeWithComponent(tree, 'UIRootController', classes) !== null) return { ok: true, message: '当前场景已挂载共享 UIRoot Prefab' };
+  const existingRoots = findAllNodesWithComponent(tree, 'UIRootController', classes);
+  if (existingRoots.length > 1) return { ok: false, message: `当前场景存在 ${existingRoots.length} 个 UIRootController，已停止以避免重复界面` };
+  if (existingRoots.length === 1) {
+    if (!(await scene.setProperty(existingRoots[0].target, 'mode', kind === 'MAIN' ? 0 : 1))) return { ok: false, message: '无法更新共享界面模式' };
+    await saveAuthoringScene();
+    return { ok: true, message: '当前场景已保留唯一共享 UIRoot，并刷新界面模式' };
+  }
   const canvas = flattenTree(tree).find((node) => node.name === '画布');
   if (canvas?.uuid === undefined) return { ok: false, message: '当前场景缺少中文“画布”节点，请先补齐场景骨架' };
   const created = await scene.createNode({ parent: canvas.uuid, name: '界面根', assetUuid: prefabUuid, type: 'cc.Prefab', unlinkPrefab: false });
@@ -538,7 +656,7 @@ export async function mountSharedUi(assetDb: AssetDbPort, scene: SceneQueryPort,
  * 运行时只读取这些序列化引用；这里不能再依赖 execute-component-method 内部扫描场景树，
  * 否则切场景或 Prefab 覆盖刷新后会把“当前恰好找到的组件”误当成正式绑定。
  */
-export async function wireSceneFoundation(assetDb: AssetDbPort, scene: SceneQueryPort, kind: SceneSkeletonKind): Promise<FoundationAuthoringResult> {
+async function connectSceneReferences(assetDb: AssetDbPort, scene: SceneQueryPort, kind: SceneSkeletonKind): Promise<FoundationAuthoringResult> {
   if (kind === 'BOOT') return await cleanLegacyBootNodes(scene);
   const classes = await queryClasses(scene);
   const tree = await scene.queryNodeTree();
@@ -556,6 +674,7 @@ export async function wireSceneFoundation(assetDb: AssetDbPort, scene: SceneQuer
       const powerPanel = requireUniqueComponent(nodes, 'PowerPanel', classes);
       const crewStatusPanel = requireUniqueComponent(nodes, 'CrewStatusPanel', classes);
       const pageRouter = requireUniqueComponent(nodes, 'MainPageRouter', classes);
+      const buildPageController = requireUniqueComponent(nodes, 'BuildPageController', classes);
       const cameraController = requireUniqueComponent(nodes, 'CameraController', classes);
       const contentViewSync = requireUniqueComponent(nodes, 'ShipContentViewSync', classes);
       const worldInteractionController = requireUniqueComponent(nodes, 'WorldInteractionController', classes);
@@ -564,17 +683,14 @@ export async function wireSceneFoundation(assetDb: AssetDbPort, scene: SceneQuer
       const mainContentRoot = requireUniqueNode(nodes, '主界面内容根');
       const battleContentRoot = requireUniqueNode(nodes, '战斗界面内容根');
       const popupRoot = requireUniqueNode(nodes, '弹窗层');
-      await setNodeLocalPosition(scene, worldRoot.uuid as string, 0, 0, 0);
       await setNodeActive(scene, mainContentRoot.uuid as string, true);
       await setNodeActive(scene, battleContentRoot.uuid as string, false);
-      await setNodeActive(scene, popupRoot.uuid as string, false);
-      await setNodeActive(scene, powerPanel.nodeUuid, false);
-      await setNodeActive(scene, crewStatusPanel.nodeUuid, false);
       for (const [path, type, target] of [
         ['shipView', 'ShipView', shipView],
         ['powerPanel', 'PowerPanel', powerPanel],
         ['crewStatusPanel', 'CrewStatusPanel', crewStatusPanel],
         ['mainPageRouter', 'MainPageRouter', pageRouter],
+        ['buildPageController', 'BuildPageController', buildPageController],
         ['cameraController', 'CameraController', cameraController],
         ['contentViewSync', 'ShipContentViewSync', contentViewSync],
         ['worldInteractionController', 'WorldInteractionController', worldInteractionController],
@@ -584,15 +700,8 @@ export async function wireSceneFoundation(assetDb: AssetDbPort, scene: SceneQuer
       if (!(await scene.setProperty(bootstrap, 'configVersion', P8_CLOSE_CONFIG_VERSION))) {
         throw new Error('无法升级主场景配置版本');
       }
-      await setReference(scene, pageRouter, 'powerPanel', 'PowerPanel', powerPanel);
-      await setReference(scene, pageRouter, 'crewStatusPanel', 'CrewStatusPanel', crewStatusPanel);
       await setReference(scene, cameraController, 'camera', 'cc.Camera', camera);
       await setReference(scene, shipView, 'configSource', 'GameConfigCsvSource', configSource);
-      await setNodeLocalPosition(scene, shipView.nodeUuid, 0, 0, 0);
-      await setNodeLocalScale(scene, shipView.nodeUuid, 1.7, 1.7, 1);
-      if (!(await scene.setProperty(camera, '_color', { type: 'cc.Color', value: { r: 2, g: 9, b: 14, a: 255 } }))) {
-        throw new Error('无法持久化主场景深色太空背景');
-      }
     } else {
       const bootstrap = requireComponent(nodes, 'BattleSceneBootstrap', classes);
       const configSource = await bindCsvConfigSourceToNode(assetDb, scene, bootstrap.nodeUuid);
@@ -603,19 +712,13 @@ export async function wireSceneFoundation(assetDb: AssetDbPort, scene: SceneQuer
       if (playerShips.length !== 1) throw new Error(`我方挂载点必须且只能包含一个飞船视图，当前为 ${playerShips.length} 个`);
       if (enemyShips.length !== 1) throw new Error(`敌方挂载点必须且只能包含一个飞船视图，当前为 ${enemyShips.length} 个`);
       const battleHud = requireUniqueComponent(nodes, 'BattleHUD', classes);
-      await setNodeLocalPosition(scene, worldRoot.uuid as string, 0, 0, 0);
       await setNodeActive(scene, requireUniqueNode(nodes, '主界面内容根').uuid as string, false);
       await setNodeActive(scene, requireUniqueNode(nodes, '战斗界面内容根').uuid as string, true);
-      await setNodeActive(scene, requireUniqueNode(nodes, '弹窗层').uuid as string, false);
       await setReference(scene, bootstrap, 'playerShipView', 'ShipView', playerShips[0].target);
       await setReference(scene, bootstrap, 'enemyShipView', 'ShipView', enemyShips[0].target);
       await setReference(scene, bootstrap, 'battleHud', 'BattleHUD', battleHud);
       await setReference(scene, playerShips[0].target, 'configSource', 'GameConfigCsvSource', configSource);
       await setReference(scene, enemyShips[0].target, 'configSource', 'GameConfigCsvSource', configSource);
-      await setNodeLocalPosition(scene, playerMount.uuid as string, -260, -40, 0);
-      await setNodeLocalPosition(scene, enemyMount.uuid as string, 260, 40, 0);
-      await setNodeLocalPosition(scene, playerShips[0].target.nodeUuid, 0, 0, 0);
-      await setNodeLocalPosition(scene, enemyShips[0].target.nodeUuid, 0, 0, 0);
     }
     await saveAuthoringScene();
     return { ok: true, message: `${kind === 'MAIN' ? '主场景' : '战斗场景'}引用已连接并保存` };
@@ -649,120 +752,10 @@ const P8_DEMO_CREWS = [
 ] as const;
 
 /**
- * P8.3 全新重建会清理的完整 Prefab 白名单。清理前必须先验证这组资源，
- * 不能在处理到一半时才发现后续 Prefab 缺失而留下半套资源。
- */
-const P8_REBUILD_CLEAN_TARGETS: readonly {
-  readonly url: string;
-  readonly viewType: 'RoomView' | 'CrewView' | 'ShipView';
-  readonly definitionId: string;
-}[] = [
-  { url: 'db://assets/prefabs/ReactorRoom.prefab', viewType: 'RoomView', definitionId: 'room-reactor' },
-  { url: 'db://assets/prefabs/ElevatorRoom.prefab', viewType: 'RoomView', definitionId: 'room-elevator' },
-  { url: 'db://assets/prefabs/StairsRoom.prefab', viewType: 'RoomView', definitionId: 'room-stairs' },
-  { url: 'db://assets/prefabs/LaserRoom.prefab', viewType: 'RoomView', definitionId: 'room-laser' },
-  { url: 'db://assets/prefabs/ShieldRoom.prefab', viewType: 'RoomView', definitionId: 'room-shield' },
-  { url: 'db://assets/prefabs/MedicalRoom.prefab', viewType: 'RoomView', definitionId: 'room-medbay' },
-  { url: 'db://assets/prefabs/EngineerCrew.prefab', viewType: 'CrewView', definitionId: 'crew-engineer' },
-  { url: 'db://assets/prefabs/GunnerCrew.prefab', viewType: 'CrewView', definitionId: 'crew-gunner' },
-  { url: 'db://assets/prefabs/MedicCrew.prefab', viewType: 'CrewView', definitionId: 'crew-medic' },
-  { url: SOLDIER_PREFAB_URL, viewType: 'CrewView', definitionId: 'crew-soldier' },
-  { url: SHIP_VIEW_PREFAB_URL, viewType: 'ShipView', definitionId: '' },
-];
-
-/** 预检只包含必须已经存在的输入/清理目标；可由 createFoundationPrefabs 新建的输出不在此列。 */
-const P8_REBUILD_PREFLIGHT_ASSET_URLS = [...new Set([
-  DEFAULT_TEMPLATE_URL,
-  BLANK_NODE_TEMPLATE_URL,
-  ROOM_TEMPLATE_URL,
-  CREW_TEMPLATE_URL,
-  `${UI_PREFAB_DIRECTORY}/PowerRoomRow.prefab`,
-  // SoldierCrew.prefab 是基础阶段可从 CREW_TEMPLATE_URL 新建的输出，不应阻断
-  // 首次全新重建；若它已存在则仍会在 cleanup 阶段纳入完整目标范围。
-  ...P8_REBUILD_CLEAN_TARGETS.filter((target) => target.url !== SOLDIER_PREFAB_URL).map((target) => target.url),
-])];
-
-type FoundationRebuildPhase = 'preflight' | 'boot-scene' | 'cleanup' | 'foundation' | 'domain-bindings' | 'appearances' | 'main-scene' | 'battle-scene' | 'finalize';
-
-interface FoundationRebuildJournal {
-  currentPhase: FoundationRebuildPhase;
-  readonly startedAtMs: number;
-  readonly phaseStartedAtMs: Partial<Record<FoundationRebuildPhase, number>>;
-  readonly phaseRecords: string[];
-  readonly recoveryRecords: string[];
-}
-
-function createFoundationRebuildJournal(): FoundationRebuildJournal {
-  return { currentPhase: 'preflight', startedAtMs: Date.now(), phaseStartedAtMs: {}, phaseRecords: [], recoveryRecords: [] };
-}
-
-function recordFoundationPhase(journal: FoundationRebuildJournal, phase: FoundationRebuildPhase, detail: string): void {
-  journal.currentPhase = phase;
-  const now = Date.now();
-  if (detail.startsWith('开始')) journal.phaseStartedAtMs[phase] = now;
-  const startedAt = journal.phaseStartedAtMs[phase];
-  const duration = detail.startsWith('完成') && startedAt !== undefined ? `（${now - startedAt}ms）` : '';
-  journal.phaseRecords.push(`${phase}:${detail}${duration}`);
-}
-
-/**
- * P8.3 破坏性步骤前的完整预检。这里只读 Asset DB/Scene，任何缺失都在清理前
- * 一次性报告；成功后把编辑上下文留在 MainScene，供后续阶段直接使用。
- */
-export async function preflightP8StarterShip(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
-  try {
-    const missingAssets: string[] = [];
-    for (const url of P8_REBUILD_PREFLIGHT_ASSET_URLS) {
-      if (await assetDb.queryUuid(url) === '') missingAssets.push(url);
-    }
-    if (missingAssets.length > 0) {
-      throw new Error(`P8.3 预检缺少资源：${missingAssets.join('、')}`);
-    }
-
-    await openAuthoringSceneContext(scene, 'BOOT');
-    const bootTree = await scene.queryNodeTree();
-    if (findNodeWithComponent(bootTree, 'BootSceneBootstrap', await queryClasses(scene)) === null) {
-      throw new Error('P8.3 预检失败：BootScene 缺少 BootSceneBootstrap');
-    }
-
-    await openAuthoringSceneContext(scene, 'MAIN');
-    const mainTree = await scene.queryNodeTree();
-    if (findNodeWithComponent(mainTree, 'MainSceneBootstrap', await queryClasses(scene)) === null) {
-      throw new Error('P8.3 预检失败：MainScene 缺少 MainSceneBootstrap');
-    }
-    const mainNodes = flattenTree(mainTree);
-    if (mainNodes.every((node) => node.name !== '画布') || mainNodes.every((node) => node.name !== '当前飞船挂载点')) {
-      throw new Error('P8.3 预检失败：MainScene 缺少中文画布或当前飞船挂载点');
-    }
-
-    await openAuthoringSceneContext(scene, 'BATTLE');
-    const battleTree = await scene.queryNodeTree();
-    if (findNodeWithComponent(battleTree, 'BattleSceneBootstrap', await queryClasses(scene)) === null) {
-      throw new Error('P8.3 预检失败：BattleScene 缺少 BattleSceneBootstrap');
-    }
-    const battleNodes = flattenTree(battleTree);
-    if (battleNodes.every((node) => node.name !== '我方飞船挂载点') || battleNodes.every((node) => node.name !== '敌方飞船挂载点')) {
-      throw new Error('P8.3 预检失败：BattleScene 缺少我方或敌方飞船挂载点');
-    }
-
-    // 旧模板是最终清理目标，可不存在（例如上一次重建已删除）；读取其当前
-    // 状态纳入预检日志，Asset DB 查询失败则在破坏性步骤前直接停止。
-    const legacyCrewPresent = await assetDb.queryUuid(LEGACY_CREW_PREFAB_URL) !== '';
-    await openAuthoringSceneContext(scene, 'MAIN');
-    return {
-      ok: true,
-      message: `P8.3 预检通过：${P8_REBUILD_PREFLIGHT_ASSET_URLS.length} 个资源与三场景挂载点均可用；旧 CrewMember.prefab${legacyCrewPresent ? '待删除' : '已不存在'}`,
-    };
-  } catch (cause) {
-    return { ok: false, message: toMessage(cause) };
-  }
-}
-
-/**
  * 把当前 MainScene 收敛为 P8 固定演示布局。所有节点均来自 Prefab，整批操作只有一条 Undo，
  * 并在成功后保存当前场景；不会扫描或改写关闭的 Scene。
  */
-export async function configureP8VoxelDemoScene(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
+async function ensureMainSceneContent(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
   const classes = await queryClasses(scene);
   let tree = await scene.queryNodeTree();
   const ships = findAllNodesWithComponent(tree, 'ShipView', classes);
@@ -799,50 +792,43 @@ export async function configureP8VoxelDemoScene(assetDb: AssetDbPort, scene: Sce
     undoId = await scene.beginRecording(shipNodeUuid);
     tree = await scene.queryNodeTree();
     const floorTargets = await collectTargetsByStableId(scene, tree, classes, 'FloorView', 'floorInstanceId');
-    // 全新标准演示必须真正释放旧的下层施工回归格（尤其是历史版本留下的 (18,1)），
-    // 否则“保留空位”的契约只停留在代码常量，Creator 场景仍会把目标判为已占用。
-    const expectedFloorIds = new Set(
-      P8_STANDARD_DEMO_FLOOR_ROWS.flatMap((y) => Array.from(
-        { length: P8_STANDARD_DEMO_FLOOR_X.max - P8_STANDARD_DEMO_FLOOR_X.min + 1 },
-        (_, index) => `floor-basic-${P8_STANDARD_DEMO_FLOOR_X.min + index}-${y}`,
-      )),
-    );
-    for (const [instanceId, target] of floorTargets) {
-      if (expectedFloorIds.has(instanceId)) continue;
-      await scene.removeNode(target.nodeUuid);
-    }
     for (const y of P8_STANDARD_DEMO_FLOOR_ROWS) {
       for (let x = P8_STANDARD_DEMO_FLOOR_X.min; x <= P8_STANDARD_DEMO_FLOOR_X.max; x += 1) {
         const instanceId = `floor-basic-${x}-${y}`;
-        const target = floorTargets.get(instanceId) ?? await createPrefabComponent(scene, floorRoot.uuid, `地板-${x}-${y}`, assetUuids.get(FLOOR_PREFAB_URL) as string, 'FloorView', createdNodeUuids);
-        await requireProperty(scene, target, 'floorInstanceId', instanceId);
-        await requireProperty(scene, target, 'floorDefinitionId', 'floor-basic');
-        if (await scene.executeComponentMethod(target.uuid, 'applyAuthoringPlacement', [x, y]) !== true) throw new Error(`无法放置地板：${instanceId}`);
+        const existing = floorTargets.get(instanceId);
+        const target = existing ?? await createPrefabComponent(scene, floorRoot.uuid, `地板-${x}-${y}`, assetUuids.get(FLOOR_PREFAB_URL) as string, 'FloorView', createdNodeUuids);
+        await ensureStableProperty(scene, target, 'floorInstanceId', instanceId);
+        await ensureStableProperty(scene, target, 'floorDefinitionId', 'floor-basic');
+        if (existing === undefined && await scene.executeComponentMethod(target.uuid, 'applyAuthoringPlacement', [x, y]) !== true) throw new Error(`无法放置地板：${instanceId}`);
       }
     }
 
     tree = await scene.queryNodeTree();
     const roomTargets = await collectTargetsByStableId(scene, tree, classes, 'RoomView', 'roomInstanceId');
     for (const entry of P8_DEMO_ROOMS) {
-      const target = roomTargets.get(entry.instanceId) ?? await createPrefabComponent(scene, roomRoot.uuid, `房间-${entry.instanceId}`, assetUuids.get(entry.prefabUrl) as string, 'RoomView', createdNodeUuids);
-      await requireProperty(scene, target, 'roomInstanceId', entry.instanceId);
-      await requireProperty(scene, target, 'initialHp', entry.initialHp);
-      if (await scene.executeComponentMethod(target.uuid, 'applyEditorPlacement', [{ x: entry.x, y: entry.y }]) !== true) throw new Error(`无法放置房间：${entry.instanceId}`);
+      const existing = roomTargets.get(entry.instanceId);
+      const target = existing ?? await createPrefabComponent(scene, roomRoot.uuid, `房间-${entry.instanceId}`, assetUuids.get(entry.prefabUrl) as string, 'RoomView', createdNodeUuids);
+      await ensureStableProperty(scene, target, 'roomInstanceId', entry.instanceId);
+      if (existing === undefined) await requireProperty(scene, target, 'initialHp', entry.initialHp);
+      if (existing === undefined && await scene.executeComponentMethod(target.uuid, 'applyEditorPlacement', [{ x: entry.x, y: entry.y }]) !== true) throw new Error(`无法放置房间：${entry.instanceId}`);
     }
 
     tree = await scene.queryNodeTree();
     const crewTargets = await collectTargetsByStableId(scene, tree, classes, 'CrewView', 'crewInstanceId');
     for (const entry of P8_DEMO_CREWS) {
-      const target = crewTargets.get(entry.instanceId) ?? await createPrefabComponent(scene, crewRoot.uuid, `船员-${entry.instanceId}`, assetUuids.get(entry.prefabUrl) as string, 'CrewView', createdNodeUuids);
-      await requireProperty(scene, target, 'crewInstanceId', entry.instanceId);
-      await requireProperty(scene, target, 'initialRoomInstanceId', entry.roomId);
-      await requireProperty(scene, target, 'initialStationIndex', entry.station);
-      await requireProperty(scene, target, 'initialHp', entry.initialHp);
-      await requireProperty(scene, target, 'patrolRoomInstanceIdsJson', JSON.stringify(entry.patrol));
-      if (await scene.executeComponentMethod(target.uuid, 'applyAuthoringPatrolRoute', [JSON.stringify(entry.patrol)]) !== true) {
+      const existing = crewTargets.get(entry.instanceId);
+      const target = existing ?? await createPrefabComponent(scene, crewRoot.uuid, `船员-${entry.instanceId}`, assetUuids.get(entry.prefabUrl) as string, 'CrewView', createdNodeUuids);
+      await ensureStableProperty(scene, target, 'crewInstanceId', entry.instanceId);
+      if (existing === undefined) {
+        await requireProperty(scene, target, 'initialRoomInstanceId', entry.roomId);
+        await requireProperty(scene, target, 'initialStationIndex', entry.station);
+        await requireProperty(scene, target, 'initialHp', entry.initialHp);
+        await requireProperty(scene, target, 'patrolRoomInstanceIdsJson', JSON.stringify(entry.patrol));
+      }
+      if (existing === undefined && await scene.executeComponentMethod(target.uuid, 'applyAuthoringPatrolRoute', [JSON.stringify(entry.patrol)]) !== true) {
         throw new Error(`无法写入船员巡逻路线：${entry.instanceId}`);
       }
-      if (await scene.executeComponentMethod(target.uuid, 'applyEditorInitialPlacement', []) !== true) throw new Error(`无法放置船员：${entry.instanceId}`);
+      if (existing === undefined && await scene.executeComponentMethod(target.uuid, 'applyEditorInitialPlacement', []) !== true) throw new Error(`无法放置船员：${entry.instanceId}`);
     }
 
     await scene.endRecording(undoId);
@@ -860,214 +846,6 @@ export async function configureP8VoxelDemoScene(assetDb: AssetDbPort, scene: Sce
   }
 }
 
-/**
- * 通过公开 Scene API 把 BootScene 收敛为唯一最小启动骨架。
- *
- * 先在一次 recording 中删除旧子树，再复用场景骨架创建器生成“主相机 +
- * 画布/启动装配”。保存后必须重开并验证，不允许只依赖当前内存文档。
- */
-export async function rebuildP8BootScene(scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
-  let undoId: string | null = null;
-  try {
-    await openAuthoringSceneContext(scene, 'BOOT');
-    const tree = await scene.queryNodeTree();
-    if (tree.uuid === undefined) throw new Error('BootScene 根节点缺少 UUID');
-    undoId = await scene.beginRecording(tree.uuid);
-    for (const child of tree.children ?? []) {
-      if (child.uuid === undefined) continue;
-      await scene.removeNode(child.uuid);
-      await waitForNodeRemoval(scene, child.uuid);
-    }
-    await scene.endRecording(undoId);
-    undoId = null;
-
-    const initialized = await initializeSceneSkeleton(scene, 'BOOT');
-    if (!initialized.ok) throw new Error(initialized.message);
-    await saveAuthoringScene();
-
-    await openAuthoringSceneContext(scene, 'BOOT');
-    const reopened = await scene.queryNodeTree();
-    const rootChildren = reopened.children ?? [];
-    const cameras = rootChildren.filter((node) => node.name === '主相机');
-    const canvases = rootChildren.filter((node) => node.name === '画布');
-    const assembly = canvases[0]?.children?.filter((node) => node.name === '启动装配') ?? [];
-    const classes = await queryClasses(scene);
-    if (cameras.length !== 1 || canvases.length !== 1 || assembly.length !== 1) {
-      throw new Error('BootScene 重开验证失败：必须且只能包含主相机、画布和画布下的启动装配');
-    }
-    if (findNodeWithComponent(assembly[0], 'BootSceneBootstrap', classes) === null) {
-      throw new Error('BootScene 重开验证失败：启动装配缺少 BootSceneBootstrap');
-    }
-    if (flattenTree(reopened).some((node) => node.name === 'Canvas' || node.name === 'Camera')) {
-      throw new Error('BootScene 重开验证失败：仍存在旧英文 Canvas/Camera');
-    }
-    return { ok: true, message: 'BootScene 已全新重建为主相机与画布/启动装配，并通过重开验证' };
-  } catch (cause) {
-    if (undoId !== null) await scene.cancelRecording(undoId).catch(() => undefined);
-    return { ok: false, message: toMessage(cause) };
-  }
-}
-
-/**
- * 全新重建 P8.3 资源与标准新手船。
- *
- * 这是创作面板使用的公开 API 编排层：Prefab/Scene 的具体修改仍由已有公开端口
- * 完成，视觉绑定通过 hooks 注入，避免 foundation 模块反向依赖 PSS 领域模块。
- * 每个 hook 完成后都重新打开 MainScene，防止 Creator 当前文档停留在 Prefab。
- */
-export async function rebuildP8StarterShip(
-  assetDb: AssetDbPort,
-  scene: SceneQueryPort,
-  hooks: FoundationRebuildHooks = {},
-): Promise<FoundationAuthoringResult> {
-  const steps: string[] = [];
-  const journal = createFoundationRebuildJournal();
-  try {
-    recordFoundationPhase(journal, 'preflight', '开始只读资源与场景校验');
-    const preflight = await preflightP8StarterShip(assetDb, scene);
-    if (!preflight.ok) throw new Error(`P8.3 预检失败：${preflight.message}`);
-    steps.push(preflight.message);
-    recordFoundationPhase(journal, 'preflight', '完成只读资源与场景校验');
-
-    recordFoundationPhase(journal, 'boot-scene', '开始全新重建 BootScene 最小中文骨架');
-    const boot = await rebuildP8BootScene(scene);
-    if (!boot.ok) throw new Error(`启动场景重建失败：${boot.message}`);
-    steps.push(boot.message);
-    recordFoundationPhase(journal, 'boot-scene', '完成 BootScene 最小中文骨架');
-
-    recordFoundationPhase(journal, 'cleanup', '开始清理 P8 Prefab');
-    await cleanP8DefinitionComponents(assetDb, scene);
-    recordFoundationPhase(journal, 'cleanup', '完成 P8 Prefab 清理');
-    steps.push('已通过公开 Scene API 移除旧 View/CSV 组件');
-
-    recordFoundationPhase(journal, 'foundation', '开始创建或升级共享基础 Prefab');
-    const foundation = await createFoundationPrefabs(assetDb, scene, 'MAIN');
-    if (!foundation.ok) throw new Error(`共享基础资源重建失败：${foundation.message}`);
-    recordFoundationPhase(journal, 'foundation', '完成共享基础 Prefab 创建或升级');
-    steps.push('共享 Prefab 已创建或升级');
-
-    recordFoundationPhase(journal, 'domain-bindings', '开始重新绑定房间与船员定义');
-    await rebuildP8DomainBindings(assetDb, scene);
-    recordFoundationPhase(journal, 'domain-bindings', '完成房间与船员定义绑定');
-    steps.push('房间与船员 Prefab 已重新绑定定义和内存预览');
-
-    recordFoundationPhase(journal, 'appearances', '开始注入视觉绑定');
-    for (const [label, hook] of [
-      ['房间外观', hooks.bindRoomAppearances],
-      ['船员外观', hooks.bindCrewAppearances],
-      ['新手船外观', hooks.bindHullAppearances],
-    ] as const) {
-      if (hook === undefined) continue;
-      const result = await hook();
-      if (!result.ok) throw new Error(`${label}重建失败：${result.message}`);
-      steps.push(result.message);
-      await openAuthoringSceneContext(scene, 'MAIN');
-    }
-    recordFoundationPhase(journal, 'appearances', '完成视觉绑定');
-
-    recordFoundationPhase(journal, 'main-scene', '开始重建 MainScene 标准新手船');
-    await resetP8SceneShipInstances(scene, 'MAIN');
-    await ensureP8MainShipInstance(assetDb, scene);
-    steps.push('已移除主场景旧飞船实例及其失效属性覆盖');
-    // 最后两步只触碰当前 MainScene，确保标准新手船与共享 UI 在同一文档中持久化。
-    const mounted = await mountSharedUi(assetDb, scene, 'MAIN');
-    if (!mounted.ok) throw new Error(`共享界面装配失败：${mounted.message}`);
-    steps.push(mounted.message);
-    const wired = await wireSceneFoundation(assetDb, scene, 'MAIN');
-    if (!wired.ok) throw new Error(`主场景引用连接失败：${wired.message}`);
-    steps.push(wired.message);
-    const demo = await configureP8VoxelDemoScene(assetDb, scene);
-    if (!demo.ok) throw new Error(`标准新手船装配失败：${demo.message}`);
-    steps.push(demo.message);
-    recordFoundationPhase(journal, 'main-scene', '完成 MainScene 标准新手船');
-
-    recordFoundationPhase(journal, 'battle-scene', '开始重建 BattleScene 双方飞船');
-    await resetP8SceneShipInstances(scene, 'BATTLE');
-    steps.push('已移除战斗场景旧双方飞船实例及其失效属性覆盖');
-    const battle = await configureP8BattleScene(assetDb, scene);
-    if (!battle.ok) throw new Error(`战斗场景装配失败：${battle.message}`);
-    steps.push(battle.message);
-    // 必须先切走再重开，确保校验读取的是 Creator 已保存并重新反序列化的引用，
-    // 不能把当前内存中的 set-property 成功误报为持久化完成。
-    await openAuthoringSceneContext(scene, 'MAIN');
-    await openAuthoringSceneContext(scene, 'BATTLE');
-    const reopenedBattleNodes = flattenTree(await scene.queryNodeTree());
-    const reopenedBattleClasses = await queryClasses(scene);
-    const reopenedBattleBootstrap = requireUniqueComponent(reopenedBattleNodes, 'BattleSceneBootstrap', reopenedBattleClasses);
-    const battleValidation = await scene.executeComponentMethod(reopenedBattleBootstrap.uuid, 'applyEditorSceneReferences', []) as { readonly ok?: boolean; readonly message?: string } | undefined;
-    if (!isAuthoringMethodSuccess(battleValidation)) {
-      throw new Error(`BattleScene 重开后持久引用校验失败：${battleValidation?.message ?? '未知错误'}`);
-    }
-    steps.push('BattleScene 双方飞船与战斗界面引用已通过重开验证');
-    await openAuthoringSceneContext(scene, 'MAIN');
-    steps.push('已返回主场景编辑上下文');
-    recordFoundationPhase(journal, 'battle-scene', '完成 BattleScene 双方飞船');
-
-    recordFoundationPhase(journal, 'finalize', '开始删除旧模板并完成收口');
-    if (await assetDb.queryUuid(LEGACY_CREW_PREFAB_URL) !== '' && await assetDb.deleteAsset(LEGACY_CREW_PREFAB_URL) === null) {
-      throw new Error('旧 CrewMember.prefab 删除失败，已停止收口');
-    }
-    steps.push('已通过 Asset DB 删除旧 CrewMember.prefab');
-    recordFoundationPhase(journal, 'finalize', '完成旧模板清理与收口');
-    return { ok: true, message: `P8.3 全新重建完成（总耗时 ${Date.now() - journal.startedAtMs}ms）：${steps.join('；')}；阶段记录：${journal.phaseRecords.join('，')}` };
-  } catch (cause) {
-    const recovery = await recoverP8RebuildFailure(scene, journal);
-    return {
-      ok: false,
-      message: `P8.3 全新重建在${journal.currentPhase}阶段失败（已耗时 ${Date.now() - journal.startedAtMs}ms）：${toMessage(cause)}；${recovery}；阶段记录：${journal.phaseRecords.join('，')}`,
-    };
-  }
-}
-
-/**
- * 失败时恢复公开 Scene 编辑上下文；各资源的 recording 由所属阶段先行取消。
- * 已经 save-scene/Asset DB 提交的阶段不伪装成可自动回滚，明确提示人工复核，
- * 避免“失败恢复完成”被误解为跨资源事务已经恢复原状。
- */
-async function recoverP8RebuildFailure(scene: SceneQueryPort, journal: FoundationRebuildJournal): Promise<string> {
-  const failures: string[] = [];
-  try {
-    await openAuthoringSceneContext(scene, 'MAIN');
-    journal.recoveryRecords.push('已恢复 MainScene 编辑上下文');
-  } catch (cause) {
-    failures.push(`恢复 MainScene 失败：${toMessage(cause)}`);
-  }
-  if (failures.length > 0) return `失败恢复未完成：${failures.join('；')}`;
-  journal.recoveryRecords.push('已提交的 Prefab/Scene 改动不会自动回滚，需按阶段记录人工复核');
-  return `失败恢复完成（仅上下文恢复）：${journal.recoveryRecords.join('，')}`;
-}
-
-/**
- * 全新重建时删除指定场景挂载点下的旧 ShipView 实例。
- *
- * 旧实例可能携带 Creator 无法由脚本声明的 hullDefinitionAsset propertyOverride；
- * 公开 Scene API 没有“删除单个 override”方法，因此只能在一次 recording 中删除
- * 整个实例，再由后续装配步骤从干净 Prefab 重新挂载。
- */
-async function resetP8SceneShipInstances(scene: SceneQueryPort, kind: 'MAIN' | 'BATTLE'): Promise<void> {
-  await openAuthoringSceneContext(scene, kind);
-  const tree = await scene.queryNodeTree();
-  const classes = await queryClasses(scene);
-  const mountNames = kind === 'MAIN' ? ['当前飞船挂载点'] : ['我方飞船挂载点', '敌方飞船挂载点'];
-  const mountNodes = flattenTree(tree).filter((node) => node.uuid !== undefined && mountNames.includes(node.name ?? ''));
-  const shipNodes = mountNodes.flatMap((mount) => (mount.children ?? []).filter((child) => child.uuid !== undefined && getComponentTarget(child, 'ShipView', classes) !== null).map((child) => ({ mount, child })));
-  if (shipNodes.length === 0) return;
-  const recordingRoot = kind === 'MAIN' ? mountNodes[0]?.uuid : tree.uuid;
-  if (recordingRoot === undefined) throw new Error(`${kind === 'MAIN' ? '主场景' : '战斗场景'}缺少飞船挂载录制根节点`);
-  let undoId: string | null = await scene.beginRecording(recordingRoot);
-  try {
-    for (const { child } of shipNodes) {
-      await scene.removeNode(child.uuid as string);
-      await waitForNodeRemoval(scene, child.uuid as string);
-    }
-    await scene.endRecording(undoId);
-    undoId = null;
-  } catch (cause) {
-    if (undoId !== null) await scene.cancelRecording(undoId).catch(() => undefined);
-    throw new Error(`删除${kind === 'MAIN' ? '主场景' : '战斗场景'}旧飞船实例失败：${toMessage(cause)}`);
-  }
-}
-
 /** 主场景没有旧实例时也要从共享 ShipView Prefab 建立唯一标准新手船根。 */
 async function ensureP8MainShipInstance(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
   await openAuthoringSceneContext(scene, 'MAIN');
@@ -1075,7 +853,14 @@ async function ensureP8MainShipInstance(assetDb: AssetDbPort, scene: SceneQueryP
   const classes = await queryClasses(scene);
   const mount = flattenTree(tree).find((node) => node.uuid !== undefined && node.name === '当前飞船挂载点');
   if (mount?.uuid === undefined) throw new Error('主场景缺少当前飞船挂载点');
-  if ((mount.children ?? []).some((child) => getComponentTarget(child, 'ShipView', classes) !== null)) return;
+  const existingShip = (mount.children ?? []).find((child) => getComponentTarget(child, 'ShipView', classes) !== null);
+  if (existingShip !== undefined) {
+    const existingTarget = getComponentTarget(existingShip, 'ShipView', classes);
+    if (existingTarget === null) throw new Error('主场景现有飞船缺少 ShipView 组件');
+    await ensureStableProperty(scene, existingTarget, 'shipId', 'ship-1');
+    await ensureStableProperty(scene, existingTarget, 'hullDefinitionId', P8_STANDARD_STARTER_SHIP.hullDefinitionId);
+    return;
+  }
   const prefabUuid = await assetDb.queryUuid(SHIP_VIEW_PREFAB_URL);
   if (prefabUuid === '') throw new Error(`缺少 ShipView.prefab：${SHIP_VIEW_PREFAB_URL}`);
   const undoId = await scene.beginRecording(mount.uuid);
@@ -1093,122 +878,7 @@ async function ensureP8MainShipInstance(assetDb: AssetDbPort, scene: SceneQueryP
   }
 }
 
-/**
- * 清理 P8 领域 Prefab 上的旧 View/CSV 组件，再由公开绑定器重新挂载。
- * 只触碰当前打开的资源，不能用文本替换绕过 Creator 的组件生命周期。
- */
-async function cleanP8DefinitionComponents(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
-  // rebuildP8StarterShip 已完成全量预检；这里仍保留逐项 fail-closed，避免未来
-  // 其他调用方绕过编排器后把半套 Prefab 清理掉。
-  const missing: string[] = [];
-  for (const target of P8_REBUILD_CLEAN_TARGETS) {
-    if (target.url === SOLDIER_PREFAB_URL) continue;
-    if (await assetDb.queryUuid(target.url) === '') missing.push(target.url);
-  }
-  if (missing.length > 0) throw new Error(`清理前发现 P8.3 Prefab 缺失：${missing.join('、')}`);
-
-  for (const { url, viewType, definitionId } of P8_REBUILD_CLEAN_TARGETS) {
-    // 士兵 Prefab 属于基础创建阶段的可选输出；已存在时清理重建，不存在时
-    // 交给 createFoundationPrefabs 从模板创建后再绑定。
-    if (url === SOLDIER_PREFAB_URL && await assetDb.queryUuid(url) === '') continue;
-    if (await assetDb.queryUuid(url) === '') throw new Error(`缺少 P8.3 Prefab：${url}`);
-    await openEditorAsset(url);
-    const root = await waitForEditablePrefabRoot(scene, url);
-    const classes = await queryClasses(scene);
-    const tree = await scene.queryNodeTree();
-    const rootNode = flattenTree(tree).find((node) => node.uuid === root.uuid) ?? root;
-    const rootUuid = root.uuid as string;
-    let undoId: string | null = await scene.beginRecording(rootUuid);
-    try {
-      // 旧 Prefab 的表现子树不再复用；删除通过公开 Scene API 完成，后续 ensure
-      // 方法会重建持久层级。逐个等待 Creator 完成 remove，不能在异步刷新前读取旧树。
-      for (const child of rootNode.children ?? []) {
-        if (child.uuid === undefined) continue;
-        await scene.removeNode(child.uuid);
-        await waitForNodeRemoval(scene, child.uuid);
-      }
-
-      const refreshed = flattenTree(await scene.queryNodeTree()).find((node) => node.uuid === rootUuid) ?? root;
-      // 清理根节点上所有旧脚本/CSV 组件（包括重复挂载），只保留 Creator 原生的
-      // UITransform/Graphics；之后再挂载唯一 View，避免旧 definitionAsset 残留。
-      const removable = (refreshed.components ?? [])
-        .map((component, index) => getSceneComponentTarget({ ...component, nodeUuid: rootUuid, index: component.index ?? index }))
-        .filter((target): target is SceneComponentTarget => target !== undefined)
-        .filter((target) => {
-          const component = (refreshed.components ?? [])[target.index];
-          return component !== undefined
-            && !componentTypeMatches(component, 'cc.UITransform', classes)
-            && !componentTypeMatches(component, 'cc.Graphics', classes);
-        });
-      for (const target of removable) {
-        await scene.removeComponent(target.uuid);
-        await waitForSpecificComponentRemoval(scene, target.uuid);
-      }
-      await ensureComponentOnNode(scene, rootUuid, 'cc.UITransform');
-      await ensureComponentOnNode(scene, rootUuid, 'cc.Graphics');
-      const freshView = await ensureComponentOnNode(scene, rootUuid, viewType);
-      if (freshView === null) throw new Error(`${url} 无法重新挂载 ${viewType}`);
-      if (definitionId !== '') {
-        const property = viewType === 'RoomView' ? 'roomDefinitionId' : 'crewDefinitionId';
-        if (!(await scene.setProperty(freshView, property, definitionId, { record: false }))) throw new Error(`${url} 无法写入 ${property}`);
-      }
-      // 先提交单个 Prefab 的 recording，再保存资源，避免把未提交的 Undo
-      // 记录持久化到 Creator 文档或在失败时留下半条 recording。
-      await scene.endRecording(undoId);
-      undoId = null;
-      await saveAuthoringScene();
-    } catch (cause) {
-      if (undoId !== null) await scene.cancelRecording(undoId).catch(() => undefined);
-      throw new Error(`${url} 清理事务失败：${toMessage(cause)}`);
-    }
-  }
-}
-
-async function waitForNodeRemoval(scene: SceneQueryPort, nodeUuid: string): Promise<void> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (!flattenTree(await scene.queryNodeTree()).some((node) => node.uuid === nodeUuid)) return;
-    await delay();
-  }
-  throw new Error(`旧节点 ${nodeUuid} 未从当前 Prefab 移除`);
-}
-
-async function waitForSpecificComponentRemoval(scene: SceneQueryPort, componentUuid: string): Promise<void> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const tree = await scene.queryNodeTree();
-    if (!flattenTree(tree).some((node) => (node.components ?? []).some((component) => getSceneComponentUuid(component) === componentUuid))) return;
-    await delay();
-  }
-  throw new Error(`旧组件 ${componentUuid} 未从当前 Prefab 移除`);
-}
-
-async function rebuildP8DomainBindings(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
-  const rooms: readonly [string, string][] = [
-    ['db://assets/prefabs/ReactorRoom.prefab', 'room-reactor'],
-    ['db://assets/prefabs/ElevatorRoom.prefab', 'room-elevator'],
-    ['db://assets/prefabs/StairsRoom.prefab', 'room-stairs'],
-    ['db://assets/prefabs/LaserRoom.prefab', 'room-laser'],
-    ['db://assets/prefabs/ShieldRoom.prefab', 'room-shield'],
-    ['db://assets/prefabs/MedicalRoom.prefab', 'room-medbay'],
-  ];
-  for (const [url, id] of rooms) {
-    await openEditorAsset(url);
-    const result = await bindRoomDefinitionToOpenPrefab(scene, assetDb, id);
-    if (!result.ok) throw new Error(result.message);
-  }
-  const crews: readonly [string, string, string][] = [
-    ['db://assets/prefabs/EngineerCrew.prefab', 'crew-engineer', 'ENGINEER'],
-    ['db://assets/prefabs/GunnerCrew.prefab', 'crew-gunner', 'GUNNER'],
-    ['db://assets/prefabs/MedicCrew.prefab', 'crew-medic', 'MEDIC'],
-    [SOLDIER_PREFAB_URL, 'crew-soldier', 'SOLDIER'],
-  ];
-  for (const [url, id, role] of crews) {
-    await openEditorAsset(url);
-    const result = await bindCrewDefinitionToOpenPrefab(scene, assetDb, id, role as 'ENGINEER' | 'GUNNER' | 'MEDIC' | 'SOLDIER');
-    if (!result.ok) throw new Error(result.message);
-  }
-}
-
-async function configureP8BattleScene(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
+async function ensureBattleSceneShips(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
   try {
     await openAuthoringSceneContext(scene, 'BATTLE');
     const tree = await scene.queryNodeTree();
@@ -1232,11 +902,15 @@ async function configureP8BattleScene(assetDb: AssetDbPort, scene: SceneQueryPor
     const playerTarget = await waitForComponentOnNode(scene, player.uuid, 'ShipView');
     const enemyTarget = await waitForComponentOnNode(scene, enemy.uuid, 'ShipView');
     if (playerTarget === null || enemyTarget === null) return { ok: false, message: 'BattleScene ShipView 组件未加载' };
-    if (!(await scene.setProperty(playerTarget, 'shipId', 'ship-1'))) return { ok: false, message: '无法写入玩家飞船实例标识' };
-    if (!(await scene.setProperty(playerTarget, 'hullDefinitionId', 'hull-starter'))) return { ok: false, message: '无法写入玩家船体定义标识' };
-    if (!(await scene.setProperty(enemyTarget, 'shipId', 'ship-enemy-1'))) return { ok: false, message: '无法写入敌方飞船实例标识' };
-    if (!(await scene.setProperty(enemyTarget, 'hullDefinitionId', 'hull-raider'))) return { ok: false, message: '无法写入敌方船体定义标识' };
-    const wired = await wireSceneFoundation(assetDb, scene, 'BATTLE');
+    try {
+      await ensureStableProperty(scene, playerTarget, 'shipId', 'ship-1');
+      await ensureStableProperty(scene, playerTarget, 'hullDefinitionId', 'hull-starter');
+      await ensureStableProperty(scene, enemyTarget, 'shipId', 'ship-enemy-1');
+      await ensureStableProperty(scene, enemyTarget, 'hullDefinitionId', 'hull-raider');
+    } catch (cause) {
+      return { ok: false, message: `BattleScene 稳定引用冲突：${toMessage(cause)}` };
+    }
+    const wired = await connectSceneReferences(assetDb, scene, 'BATTLE');
     if (!wired.ok) return { ok: false, message: wired.message };
     await saveAuthoringScene();
     return { ok: true, message: 'BattleScene 已装配玩家 hull-starter 与敌方 hull-raider' };
@@ -1320,6 +994,19 @@ async function requireProperty(scene: SceneQueryPort, target: SceneComponentTarg
   if (!(await scene.setProperty(target, path, value, { record: false }))) throw new Error(`无法写入 ${path}`);
 }
 
+async function ensureStableProperty(scene: SceneQueryPort, target: SceneComponentTarget, path: string, expected: string): Promise<void> {
+  const current = await readAuthoringProperty(scene, target, path);
+  if (typeof current === 'string' && current.trim() !== '' && current !== expected) {
+    throw new Error(`${path} 冲突：已有“${current}”，期望“${expected}”`);
+  }
+  if (current !== expected && !(await scene.setProperty(target, path, expected, { record: false }))) throw new Error(`无法写入 ${path}`);
+}
+
+async function readAuthoringProperty(scene: SceneQueryPort, target: SceneComponentTarget, path: string): Promise<unknown> {
+  const component = await scene.queryComponent(target.uuid);
+  return component?.value?.[path];
+}
+
 async function createBlankPrefab(
   assetDb: AssetDbPort,
   scene: SceneQueryPort,
@@ -1360,7 +1047,7 @@ async function createConvertedPrefab(
   context.createdAssetUrls.push(targetUrl);
   const blankTemplateUrl = componentType === null
     ? (targetUrl === BLANK_NODE_TEMPLATE_URL ? DEFAULT_TEMPLATE_URL : BLANK_NODE_TEMPLATE_URL)
-    : `${UI_PREFAB_DIRECTORY}/MainMenuPage.prefab`;
+    : BLANK_NODE_TEMPLATE_URL;
   const sourceUrl = await assetDb.queryUuid(blankTemplateUrl) === '' ? DEFAULT_TEMPLATE_URL : blankTemplateUrl;
   if (await assetDb.copyAsset(sourceUrl, targetUrl) === null) throw new Error(`无法复制 Prefab 模板：${targetUrl}`);
   // copy-asset 返回成功只代表文件复制请求已接受；Creator 仍可能尚未完成
@@ -1383,7 +1070,7 @@ async function createConvertedPrefab(
   await saveAuthoringScene();
 }
 
-async function configureMainScreenPrefab(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
+async function configureMainScreenPrefab(scene: SceneQueryPort): Promise<void> {
   await openEditorAsset(MAIN_SCREEN_PREFAB_URL);
   const root = await waitForEditablePrefabRoot(scene, MAIN_SCREEN_PREFAB_URL);
   const router = await waitForComponentOnNode(scene, root.uuid as string, 'MainPageRouter');
@@ -1394,65 +1081,41 @@ async function configureMainScreenPrefab(assetDb: AssetDbPort, scene: SceneQuery
     if (matches.length !== 1 || matches[0]?.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 缺少唯一中文节点：${name}`);
     return matches[0];
   };
-  const host = required('页面挂载点');
+  required('页面层');
   required('主导航栏');
   required('界面框架素材');
   const powerNode = required('能源面板');
   const crewNode = required('船员状态面板');
-  if (host?.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 缺少页面挂载点`);
-  const powerUuid = await assetDb.queryUuid(POWER_PANEL_PREFAB_URL);
-  const crewUuid = await assetDb.queryUuid(CREW_STATUS_PANEL_PREFAB_URL);
-  if (powerUuid === '' || crewUuid === '') throw new Error('主界面模块缺少能源或船员面板 Prefab');
-  if (powerNode.uuid === undefined || crewNode.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 公共面板实例缺失 UUID`);
-  if (!(await scene.queryNodesByAssetUuid(powerUuid)).includes(powerNode.uuid)) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 能源面板不是正式 Prefab 实例`);
-  if (!(await scene.queryNodesByAssetUuid(crewUuid)).includes(crewNode.uuid)) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 船员状态面板不是正式 Prefab 实例`);
-  await setPrefabReference(assetDb, scene, router, 'mainMenuPagePrefab', 'MainMenuPage');
-  await setPrefabReference(assetDb, scene, router, 'galaxyMapPagePrefab', 'GalaxyMapPage');
-  await setPrefabReference(assetDb, scene, router, 'shipPagePrefab', 'ShipMainPage');
-  await setPrefabReference(assetDb, scene, router, 'buildPagePrefab', 'BuildPage');
-  await setPrefabReference(assetDb, scene, router, 'crewPagePrefab', 'CrewPage');
-  await setNodeReference(scene, router, 'pageHost', host.uuid);
+  const pageNodes = [
+    ['mainMenuPage', '主菜单页面'], ['galaxyMapPage', '星图页面'], ['shipPage', '飞船页面'],
+    ['buildPage', '建造页面'], ['crewPage', '船员页面'],
+  ] as const;
+  for (const [property, name] of pageNodes) {
+    const page = required(name);
+    if (page.uuid === undefined) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 无法绑定持久页面：${name}`);
+    await ensureReference(scene, router, property, 'cc.Node', page.uuid);
+  }
   const powerTarget = await waitForComponentOnNode(scene, powerNode.uuid as string, 'PowerPanel');
   const crewTarget = await waitForComponentOnNode(scene, crewNode.uuid as string, 'CrewStatusPanel');
-  if (powerTarget === null || crewTarget === null) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 公共面板实例缺少组件`);
-  await setReference(scene, router, 'powerPanel', 'PowerPanel', powerTarget);
-  await setReference(scene, router, 'crewStatusPanel', 'CrewStatusPanel', crewTarget);
+  if (powerTarget === null || crewTarget === null) throw new Error(`${MAIN_SCREEN_PREFAB_URL} 公共面板缺少组件`);
+  // 公共面板由 MainPageRouter 按持久中文节点解析。旧版本把自定义组件引用写进
+  // Prefab targetOverrides，Creator 3.8.8 再次 set-property 时会在 decodePatch
+  // 访问未定义类；这里只校验组件存在并保存，让脚本重载后清除旧覆盖。
   await saveAuthoringScene();
-}
-
-/** PowerPanel 的动态行模板属于面板 Prefab 自身，不能只绑定到某个 UIRoot 实例。 */
-async function configurePowerPanelPrefab(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
-  await openEditorAsset(POWER_PANEL_PREFAB_URL);
-  const root = await waitForEditablePrefabRoot(scene, POWER_PANEL_PREFAB_URL);
-  const power = await waitForComponentOnNode(scene, root.uuid as string, 'PowerPanel');
-  if (power === null) throw new Error(`${POWER_PANEL_PREFAB_URL} 缺少 PowerPanel`);
-  const rowUuid = await assetDb.queryUuid(`${UI_PREFAB_DIRECTORY}/PowerRoomRow.prefab`);
-  if (rowUuid === '') throw new Error('PowerRoomRow.prefab 不存在');
-  if (!(await scene.setProperty(power, 'roomRowTemplate', { type: 'cc.Prefab', uuid: rowUuid }))) {
-    throw new Error(`${POWER_PANEL_PREFAB_URL} 无法绑定能源行模板`);
-  }
-  await saveAuthoringScene();
-}
-
-async function setPrefabReference(
-  assetDb: AssetDbPort,
-  scene: SceneQueryPort,
-  target: SceneComponentTarget,
-  path: string,
-  assetName: string,
-): Promise<void> {
-  const uuid = await assetDb.queryUuid(`${UI_PREFAB_DIRECTORY}/${assetName}.prefab`);
-  if (uuid === '' || !(await scene.setProperty(target, path, { type: 'cc.Prefab', uuid }))) {
-    throw new Error(`无法绑定页面 Prefab：${assetName}`);
-  }
 }
 
 async function setReference(scene: SceneQueryPort, owner: SceneComponentTarget, path: string, type: string, value: SceneComponentTarget): Promise<void> {
-  if (!(await scene.setProperty(owner, path, { type, uuid: value.uuid }))) throw new Error(`无法绑定 ${path}`);
+  await ensureReference(scene, owner, path, type, value.uuid);
 }
 
 async function setNodeReference(scene: SceneQueryPort, owner: SceneComponentTarget, path: string, uuid: string): Promise<void> {
-  if (!(await scene.setProperty(owner, path, { type: 'cc.Node', uuid }))) throw new Error(`无法绑定 ${path}`);
+  await ensureReference(scene, owner, path, 'cc.Node', uuid);
+}
+
+async function ensureReference(scene: SceneQueryPort, owner: SceneComponentTarget, path: string, type: string, uuid: string): Promise<void> {
+  const currentUuid = readSceneReferenceUuid(await readAuthoringProperty(scene, owner, path));
+  if (currentUuid === uuid) return;
+  if (!(await scene.setProperty(owner, path, { type, uuid }))) throw new Error(`无法绑定 ${path}`);
 }
 
 function requireComponent(nodes: readonly SceneNodeTree[], type: string, classes: readonly SceneComponentClassInfo[]): SceneComponentTarget {
@@ -1489,24 +1152,6 @@ function requireUniqueDescendantComponent(
   return matches[0].target;
 }
 
-function requireDescendantComponent(root: SceneNodeTree, type: string, classes: readonly SceneComponentClassInfo[]): SceneComponentTarget {
-  const found = findNodeWithComponent(root, type, classes);
-  if (found === null) throw new Error(`${root.name ?? '挂载点'}下缺少 ${type}`);
-  return found.target;
-}
-
-async function setNodeLocalPosition(scene: SceneQueryPort, nodeUuid: string, x: number, y: number, z: number): Promise<void> {
-  if (!(await scene.setProperty(nodeUuid, '_lpos', { type: 'cc.Vec3', value: { x, y, z } }))) {
-    throw new Error(`无法持久化节点位置：(${x},${y},${z})`);
-  }
-}
-
-async function setNodeLocalScale(scene: SceneQueryPort, nodeUuid: string, x: number, y: number, z: number): Promise<void> {
-  if (!(await scene.setProperty(nodeUuid, '_lscale', { type: 'cc.Vec3', value: { x, y, z } }))) {
-    throw new Error(`无法持久化节点缩放：(${x},${y},${z})`);
-  }
-}
-
 async function resolveDefaultSpriteFrame(assetDb: AssetDbPort, textureUrl: string): Promise<string> {
   await waitForImportedAsset(assetDb, textureUrl);
   const textureInfo = await assetDb.queryInfo(textureUrl);
@@ -1517,7 +1162,7 @@ async function resolveDefaultSpriteFrame(assetDb: AssetDbPort, textureUrl: strin
   return spriteFrame.uuid;
 }
 
-async function bindMainUiButtonStates(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
+export async function bindMainUiButtonStates(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
   const navFrames = await Promise.all(NAV_BUTTON_TEXTURE_URLS.map(async (url) => await resolveDefaultSpriteFrame(assetDb, url)));
   const battleFrames = await Promise.all(BATTLE_BUTTON_TEXTURE_URLS.map(async (url) => await resolveDefaultSpriteFrame(assetDb, url)));
   const utilityFrames = await Promise.all(UTILITY_BUTTON_TEXTURE_URLS.map(async (url) => await resolveDefaultSpriteFrame(assetDb, url)));
@@ -1546,9 +1191,9 @@ async function bindMainUiButtonStates(assetDb: AssetDbPort, scene: SceneQueryPor
     // Sprite 默认 TRIMMED 会把按钮节点扩成原图像素尺寸；先锁定 CUSTOM，保留路由定义的点击热区与布局尺寸。
     if (!(await scene.setProperty(sprite, '_sizeMode', 0))) throw new Error(`无法锁定按钮自定义尺寸：${nodeName}`);
     if (!(await scene.setProperty(sprite, '_type', 0))) throw new Error(`无法锁定按钮简单 Sprite：${nodeName}`);
-    if (!(await scene.setProperty(sprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: normal }))) throw new Error(`无法绑定按钮普通态：${nodeName}`);
+    if (await shouldFillReference(scene, sprite, 'spriteFrame') && !(await scene.setProperty(sprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: normal }))) throw new Error(`无法绑定按钮普通态：${nodeName}`);
     for (const [property, uuid] of [['_normalSprite', normal], ['_hoverSprite', hover], ['_pressedSprite', pressed], ['_disabledSprite', normal]] as const) {
-      if (!(await scene.setProperty(button, property, { type: 'cc.SpriteFrame', uuid }))) throw new Error(`无法绑定按钮状态 ${property}：${nodeName}`);
+      if (await shouldFillReference(scene, button, property) && !(await scene.setProperty(button, property, { type: 'cc.SpriteFrame', uuid }))) throw new Error(`无法绑定按钮状态 ${property}：${nodeName}`);
     }
   }
   for (const [buttonName, frame] of iconFrames) {
@@ -1558,8 +1203,37 @@ async function bindMainUiButtonStates(assetDb: AssetDbPort, scene: SceneQueryPor
     const iconSprite = await ensureComponentOnNode(scene, iconNode.uuid, 'cc.Sprite');
     if (!(await scene.setProperty(iconSprite, '_sizeMode', 0))) throw new Error(`无法锁定导航图标自定义尺寸：${buttonName}`);
     if (!(await scene.setProperty(iconSprite, '_type', 0))) throw new Error(`无法锁定导航图标简单 Sprite：${buttonName}`);
-    if (!(await scene.setProperty(iconSprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: frame }))) throw new Error(`无法绑定导航图标：${buttonName}`);
+    if (await shouldFillReference(scene, iconSprite, 'spriteFrame') && !(await scene.setProperty(iconSprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: frame }))) throw new Error(`无法绑定导航图标：${buttonName}`);
   }
+}
+
+/** 主界面背景和按钮素材必须写入 MainScreen 源 Prefab，禁止写成 UIRoot 的深层覆盖。 */
+export async function bindMainScreenVisualAssets(assetDb: AssetDbPort, scene: SceneQueryPort): Promise<void> {
+  // BuildOptionCard 等 Prefab 切换回来后，Creator 可能先返回 MainScreen 根节点，
+  // 再异步展开其子树。必须等待公开查询树出现完整节点，不能把瞬时空树误判为
+  // 设计资源缺失，也不能为了绕过等待而重建会破坏手工布局的节点。
+  await waitForEditablePrefabRoot(scene, MAIN_SCREEN_PREFAB_URL);
+  const hudFrameNode = await waitForUniqueNodeByName(scene, '界面框架素材', MAIN_SCREEN_PREFAB_URL);
+  const classes = await queryClasses(scene);
+  const hudFrameSprite = getComponentTarget(hudFrameNode, 'cc.Sprite', classes);
+  if (hudFrameSprite === null) throw new Error('界面框架素材节点缺少 cc.Sprite');
+  await assetDb.reimportAsset?.(MAIN_HUD_FRAME_TEXTURE_URL);
+  const hudFrameUuid = await resolveDefaultSpriteFrame(assetDb, MAIN_HUD_FRAME_TEXTURE_URL);
+  if (await shouldFillReference(scene, hudFrameSprite, 'spriteFrame') && !(await scene.setProperty(hudFrameSprite, 'spriteFrame', { type: 'cc.SpriteFrame', uuid: hudFrameUuid }))) {
+    throw new Error(`无法绑定主界面框架素材：${MAIN_HUD_FRAME_TEXTURE_URL}`);
+  }
+  await bindMainUiButtonStates(assetDb, scene);
+}
+
+/** 只有引用为空时才补齐视觉资源，避免一键更新覆盖设计人员在 Inspector 中的有效替换。 */
+async function shouldFillReference(scene: SceneQueryPort, target: SceneComponentTarget, path: string, assetDb?: AssetDbPort): Promise<boolean> {
+  const current = await readAuthoringProperty(scene, target, path);
+  if (current === undefined || current === null || current === '') return true;
+  const uuid = readSceneReferenceUuid(current);
+  if (uuid === undefined) return true;
+  if (assetDb === undefined) return false;
+  const info = await assetDb.queryInfo(uuid);
+  return info === null || info.invalid === true;
 }
 
 async function setNodeActive(scene: SceneQueryPort, nodeUuid: string, active: boolean): Promise<void> {
@@ -1568,12 +1242,19 @@ async function setNodeActive(scene: SceneQueryPort, nodeUuid: string, active: bo
   }
 }
 
-/** BootScene 旧骨架可能遗留英文 Canvas/Camera；只删除这两个精确名称，保留中文持久骨架。 */
+/** BootScene 旧骨架可能遗留英文 Canvas/Camera；仅删除确认为空且无业务组件的骨架节点。 */
 async function cleanLegacyBootNodes(scene: SceneQueryPort): Promise<FoundationAuthoringResult> {
   try {
     const tree = await scene.queryNodeTree();
     const legacy = flattenTree(tree).filter((node) => node.uuid !== undefined && (node.name === 'Canvas' || node.name === 'Camera'));
     if (legacy.length === 0) return { ok: true, message: '启动场景没有遗留英文 Canvas/Camera' };
+    const unsafe = legacy.filter((node) => (node.children?.length ?? 0) > 0 || (node.components ?? []).some((component) => {
+      const type = component.type ?? component.name ?? '';
+      return !['cc.UITransform', 'cc.Canvas', 'cc.Camera', 'cc.Widget'].includes(type);
+    }));
+    if (unsafe.length > 0) {
+      return { ok: false, message: `启动场景存在带内容的旧英文节点：${unsafe.map((node) => node.name ?? '未命名').join('、')}；请先在 Creator 中明确迁移或删除` };
+    }
     const depths = new Map<string, number>();
     const markDepth = (node: SceneNodeTree, depth: number): void => {
       if (node.uuid !== undefined) depths.set(node.uuid, depth);
@@ -1637,6 +1318,15 @@ async function waitForComponentRemoval(scene: SceneQueryPort, type: string): Pro
   throw new Error(`${type} 未从模板中移除`);
 }
 
+async function waitForSpecificComponentRemoval(scene: SceneQueryPort, componentUuid: string): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const tree = await scene.queryNodeTree();
+    if (!flattenTree(tree).some((node) => (node.components ?? []).some((component) => getSceneComponentUuid(component) === componentUuid))) return;
+    await delay();
+  }
+  throw new Error(`组件 ${componentUuid} 未从当前文档移除`);
+}
+
 function findNodeWithComponent(tree: SceneNodeTree, type: string, classes: readonly SceneComponentClassInfo[]): { readonly node: SceneNodeTree; readonly target: SceneComponentTarget } | null {
   const target = getComponentTarget(tree, type, classes);
   if (target !== null) return { node: tree, target };
@@ -1697,6 +1387,23 @@ async function waitForEditablePrefabRoot(scene: SceneQueryPort, assetUrl: string
     }
   }
   throw lastError instanceof Error ? lastError : new Error(`${assetUrl} 的可编辑 Prefab 根节点加载超时`);
+}
+
+/**
+ * 等待 Prefab 子树完成公开展开，并拒绝重复语义节点。
+ * Creator 切换资源后根节点和 children 不是同一时刻可见；只对“暂时没有”重试，
+ * 一旦发现重复就立即失败，避免把手工冲突静默合并。
+ */
+async function waitForUniqueNodeByName(scene: SceneQueryPort, nodeName: string, assetUrl: string): Promise<SceneNodeTree> {
+  let lastCount = 0;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const matches = flattenTree(await scene.queryNodeTree()).filter((node) => node.name === nodeName && node.uuid !== undefined);
+    lastCount = matches.length;
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) throw new Error(`${assetUrl} 存在重复中文节点：${nodeName}`);
+    await delay();
+  }
+  throw new Error(lastCount === 0 ? `${assetUrl} 缺少中文节点：${nodeName}` : `${assetUrl} 的中文节点不可编辑：${nodeName}`);
 }
 
 function delay(): Promise<void> { return new Promise((resolve) => setTimeout(resolve, 100)); }

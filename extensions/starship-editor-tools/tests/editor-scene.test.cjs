@@ -5,6 +5,7 @@ const {
   editorSceneQuery,
   getSceneComponentTarget,
   normalizeSceneNodeTree,
+  readSceneReferenceUuid,
   saveAuthoringScene,
 } = require('../dist/shared/editor-scene.js');
 const { markCurrentAuthoringAsset } = require('../dist/shared/editor-asset-db.js');
@@ -28,6 +29,26 @@ test('归一化 Cocos INode 的 __comps__ 并保留 set-property 所需节点与
     nodeUuid: 'grid-root',
     index: 0,
   });
+});
+
+test('从 Creator 多层属性 dump 中识别已有引用 UUID', () => {
+  assert.equal(readSceneReferenceUuid({ uuid: 'direct' }), 'direct');
+  assert.equal(readSceneReferenceUuid({ value: { uuid: 'nested' } }), 'nested');
+  assert.equal(readSceneReferenceUuid({ value: { __uuid__: 'asset' } }), 'asset');
+  assert.equal(readSceneReferenceUuid({ value: { uuid: { value: 'wrapped' } } }), 'wrapped');
+  assert.equal(readSceneReferenceUuid({ value: null }), undefined);
+});
+
+test('Scene 属性写入失败会报告精确组件路径', async () => {
+  global.Editor = { Message: { request: async () => { throw new Error('decodePatch'); } } };
+  try {
+    await assert.rejects(
+      editorSceneQuery.setProperty({ uuid: 'router', nodeUuid: 'main-screen', index: 1 }, 'mainMenuPage', { type: 'cc.Node', uuid: 'page' }),
+      /Creator 写入属性失败（__comps__\.1\.mainMenuPage）：decodePatch/,
+    );
+  } finally {
+    delete global.Editor;
+  }
 });
 
 test('组件属性通过公开 Scene 消息写入 __comps__ 路径和引用 dump', async () => {

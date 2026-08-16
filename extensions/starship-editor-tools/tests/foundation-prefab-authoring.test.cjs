@@ -3,16 +3,14 @@ const { readFileSync } = require('node:fs');
 const test = require('node:test');
 
 const {
-  createFoundationPrefabs,
+  createOrUpdateScene,
   cancelAuthoringPreview,
   isAuthoringMethodSuccess,
   openAuthoringSceneContext,
-  preflightP8StarterShip,
   P8_STANDARD_BUILD_TEST_TARGET,
   P8_STANDARD_DEMO_FLOOR_X,
   P8_STANDARD_DEMO_FLOOR_ROWS,
   P8_STANDARD_STARTER_SHIP,
-  rebuildP8StarterShip,
   resolveEditablePrefabRoot,
 } = require('../dist/scene/foundation-prefab-authoring.js');
 
@@ -40,7 +38,7 @@ test('Prefab 编辑模式跳过不可挂组件的 Scene 包装根', () => {
   );
 });
 
-test('共享基础升级先预检 UI Prefab，再处理 ShipView 与领域表现', () => {
+test('场景更新分支复用五个核心 UI Prefab，并保持 MainScreen 为视觉源', () => {
   const source = readFileSync('src/scene/foundation-prefab-authoring.ts', 'utf8');
   assert.match(source, /ensureShipViewP8Components\(assetDb, scene\)/);
   assert.match(source, /ensureUiRootP8Components\(assetDb, scene\)/);
@@ -48,22 +46,41 @@ test('共享基础升级先预检 UI Prefab，再处理 ShipView 与领域表现
   assert.match(source, /ensureExistingDomainPrefabComponent/);
   assert.doesNotMatch(source, /ensureSharedCsvBindings/);
   assert.doesNotMatch(source, /EDITOR_PREFABS_TABLE/);
-  assert.match(source, /wireSceneFoundation\(assetDb: AssetDbPort, scene: SceneQueryPort/);
+  assert.match(source, /connectSceneReferences\(assetDb: AssetDbPort, scene: SceneQueryPort/);
   assert.equal(source.match(/bindCsvConfigSourceToNode\(assetDb, scene, bootstrap\.nodeUuid\)/g)?.length, 2);
   assert.equal(source.match(/'configSource', 'GameConfigCsvSource', configSource/g)?.length, 3);
   assert.match(source, /缺少 UI 模块 Prefab/);
   assert.doesNotMatch(source, /validateExistingPrefab\(scene, UI_ROOT_PREFAB_URL, 'UIRootController'\)/);
-  assert.equal(source.match(/setNodeLocalPosition\(scene, worldRoot\.uuid as string, 0, 0, 0\)/g)?.length, 2);
+  assert.doesNotMatch(source, /setNodeLocalPosition/);
   assert.match(source, /ensureCanonicalUiRootModules\(assetDb, scene\)/);
   assert.doesNotMatch(source, /ensureUiRootModuleInstances/);
   assert.match(source, /MAIN_SCREEN_PREFAB_URL/);
   assert.doesNotMatch(source, /setNodeActive\(scene, settingsPopupNode\.uuid/);
   assert.doesNotMatch(source, /executeComponentMethod\(crewStatusPanel\.uuid, 'ensureAuthoringPrefabStructure'/);
-  assert.match(source, /const editableRoot = await waitForEditablePrefabRoot\(scene, buildPageUrl\)/);
-  assert.match(source, /scene\.setProperty\(controller, 'optionCardPrefab'/);
-  assert.doesNotMatch(source, /ensureAuthoringPrefabStructure.*BuildPage/);
+  assert.match(source, /const tree = await scene\.queryNodeTree\(\)/);
+  assert.match(source, /缺少持久建造页面节点/);
+  assert.match(source, /ensureReference\(scene, controller, 'optionCardPrefab', 'cc\.Prefab', cardUuid\)/);
+  assert.match(source, /ensureMainScreenP8Components/);
+  assert.match(source, /openEditorAsset\(MAIN_SCREEN_PREFAB_URL\);\n  await bindMainScreenVisualAssets\(assetDb, scene\)/);
+  assert.match(source, /await waitForEditablePrefabRoot\(scene, MAIN_SCREEN_PREFAB_URL\);\n  const hudFrameNode = await waitForUniqueNodeByName/);
+  assert.match(source, /主界面背景和按钮素材必须写入 MainScreen 源 Prefab/);
+  const uiRootUpgrade = source.slice(source.indexOf('async function ensureUiRootP8Components'), source.indexOf('async function ensureCanonicalUiRootModules'));
+  assert.doesNotMatch(uiRootUpgrade, /bindMainUiButtonStates|MAIN_HUD_FRAME_TEXTURE_URL/);
+  assert.doesNotMatch(uiRootUpgrade, /setNodeReference\(scene, pageRouter\.target, 'settingsPopup'/);
+  assert.doesNotMatch(source, /setReference\(scene, pageRouter, '(?:powerPanel|crewStatusPanel)'/);
+  assert.match(source, /await ensureReference\(scene, router, property, 'cc\.Node', page\.uuid\)/);
+  assert.match(source, /Creator 3\.8\.8 再次 set-property 时会在 decodePatch/);
+  assert.doesNotMatch(source, /setProperty\(power, 'roomRows'/);
+  assert.match(source, /能源面板缺少三个持久代表能源行/);
+  assert.doesNotMatch(source, /BuildPage\.prefab|PowerPanel\.prefab|CrewStatusPanel\.prefab/);
   assert.ok(source.includes("const atlasUrl = visual.textureUrl.replace(/\\.png$/i, '.plist');"));
   assert.match(source, /多帧定义必须确保图集按当前 visualId 生成/);
+  assert.match(source, /export async function createOrUpdateScene/);
+  assert.match(source, /补齐中文场景骨架/);
+  assert.match(source, /保存并重开验证/);
+  for (const legacy of ['rebuildP8StarterShip', 'preflightP8StarterShip', 'P8_REBUILD_CLEAN_TARGETS', 'LEGACY_CREW_PREFAB_URL', 'mountSharedUi', 'wireSceneFoundation']) {
+    assert.doesNotMatch(source, new RegExp(legacy));
+  }
 });
 
 test('船体外观绑定从逻辑内容根递归定位持久外观层', () => {
@@ -110,114 +127,6 @@ test('连接场景前主动打开下拉框指定 Scene 并等待 Bootstrap', asy
   }
 });
 
-function foundationRollbackFixture(options = {}) {
-  const existing = new Set();
-  const calls = [];
-  let copyCount = 0;
-  let roomViewVisible = false;
-  let mainSceneVisible = false;
-  const deleteFailures = options.deleteFailures ?? new Set();
-  const scene = {
-    openPrefab() { roomViewVisible = true; },
-    calls,
-    async queryNodeTree() {
-      if (mainSceneVisible) {
-        return { uuid: 'main-scene', name: 'MainScene', components: [{ type: 'MainSceneBootstrap', uuid: 'bootstrap', nodeUuid: 'main-scene', index: 0 }], children: [] };
-      }
-      return {
-        uuid: 'prefab-root',
-        name: 'PrefabRoot',
-        children: roomViewVisible
-          ? [{ uuid: 'room-node', name: '房间', components: [{ type: 'RoomView', uuid: 'room-view', nodeUuid: 'room-node', index: 0 }], children: [] }]
-          : [],
-      };
-    },
-    async executeComponentMethod(_uuid, name) {
-      calls.push(['executeComponentMethod', name]);
-      if (name === 'removeForAuthoringTemplateConversion') roomViewVisible = false;
-      return undefined;
-    },
-  };
-  const editor = {
-    Message: {
-      async request(domain, message, ...args) {
-        calls.push([domain, message, ...args]);
-        if (domain === 'asset-db' && message === 'query-uuid') return `uuid:${args[0]}`;
-        if (domain === 'scene' && message === 'open-scene') {
-          if (args[0] === 'uuid:db://assets/scenes/MainScene.scene') mainSceneVisible = true;
-          return true;
-        }
-        if (domain === 'asset-db' && message === 'open-asset') {
-          scene.openPrefab();
-        }
-        return true;
-      },
-    },
-  };
-  const assetDb = {
-    calls,
-    async queryUuid(url) {
-      calls.push(['queryUuid', url]);
-      return existing.has(url) ? `uuid:${url}` : '';
-    },
-    async copyAsset(sourceUrl, targetUrl) {
-      calls.push(['copyAsset', sourceUrl, targetUrl]);
-      copyCount += 1;
-      if (copyCount === options.failCopyAt) return null;
-      existing.add(targetUrl);
-      return { uuid: `uuid:${targetUrl}`, url: targetUrl };
-    },
-    async deleteAsset(url) {
-      calls.push(['deleteAsset', url]);
-      if (deleteFailures.has(url)) throw new Error(`模拟删除失败：${url}`);
-      existing.delete(url);
-      return { uuid: `uuid:${url}`, url };
-    },
-  };
-  return { assetDb, scene, editor, calls };
-}
-
-test('Foundation Prefab 创建失败会按逆序清理新资源并显示每个删除错误，不虚报已回滚', async () => {
-  const previousEditor = global.Editor;
-  const failedCreateUrl = 'db://assets/prefabs/CrewTemplate.prefab';
-  const firstUrl = 'db://assets/prefabs/BlankNodeTemplate.prefab';
-  const secondUrl = 'db://assets/prefabs/RoomTemplate.prefab';
-  const fixture = foundationRollbackFixture({
-    failCopyAt: 3,
-    deleteFailures: new Set([firstUrl, secondUrl]),
-  });
-  global.Editor = fixture.editor;
-  try {
-    const result = await createFoundationPrefabs(fixture.assetDb, fixture.scene);
-    assert.equal(result.ok, false);
-    assert.ok(result.message.includes(`无法复制 Prefab 模板：${failedCreateUrl}`));
-    assert.ok(result.message.includes(`${firstUrl}：模拟删除失败`));
-    assert.ok(result.message.includes(`${secondUrl}：模拟删除失败`));
-    assert.doesNotMatch(result.message, /已回滚新资源/);
-    assert.deepEqual(fixture.calls.filter(([name]) => name === 'deleteAsset').map(([, url]) => url), [failedCreateUrl, secondUrl, firstUrl]);
-  } finally {
-    if (previousEditor === undefined) delete global.Editor;
-    else global.Editor = previousEditor;
-  }
-});
-
-test('共享 Prefab 批处理失败回滚后仍返回下拉框对应场景', async () => {
-  const previousEditor = global.Editor;
-  const fixture = foundationRollbackFixture({ failCopyAt: 1 });
-  global.Editor = fixture.editor;
-  try {
-    const result = await createFoundationPrefabs(fixture.assetDb, fixture.scene, 'MAIN');
-    assert.equal(result.ok, false);
-    const openedAssets = fixture.calls
-      .filter(([domain, message]) => domain === 'scene' && message === 'open-scene')
-      .map(([, , url]) => url);
-    assert.equal(openedAssets.at(-1), 'uuid:db://assets/scenes/MainScene.scene');
-  } finally {
-    if (previousEditor === undefined) delete global.Editor;
-    else global.Editor = previousEditor;
-  }
-});
-
 test('P8.3 标准新手船布局固定反应堆尺寸并保留医疗施工测试目标', () => {
   assert.equal(P8_STANDARD_STARTER_SHIP.hullDefinitionId, 'hull-starter');
   assert.deepEqual(P8_STANDARD_STARTER_SHIP.reactor, {
@@ -239,8 +148,8 @@ test('P8.3 标准演示地板为 x=1..17，并保留下层 (18,1) 施工回归�
   const source = readFileSync('src/scene/foundation-prefab-authoring.ts', 'utf8');
   assert.match(source, /for \(let x = P8_STANDARD_DEMO_FLOOR_X\.min; x <= P8_STANDARD_DEMO_FLOOR_X\.max; x \+= 1\)/);
   assert.match(source, /P8_STANDARD_DEMO_FLOOR_ROWS/);
-  assert.match(source, /expectedFloorIds/);
-  assert.match(source, /removeNode\(target\.nodeUuid\)/);
+  assert.match(source, /collectTargetsByStableId/);
+  assert.doesNotMatch(source, /removeNode\(target\.nodeUuid\)/);
 });
 
 test('取消编辑器预览只调用白名单清理方法，不保存 Scene', async () => {
@@ -264,53 +173,22 @@ test('取消编辑器预览只调用白名单清理方法，不保存 Scene', as
   assert.deepEqual(calls, [['ship', 'clearAuthoringDefinitionPreview'], ['room', 'clearAuthoringDefinitionPreview']]);
 });
 
-test('P8.3 编排器会全新重建 BootScene，再执行 Prefab 与 Main/Battle 场景重建', async () => {
+test('场景创作只保留一个公开入口和三个固定分支，不再保留旧破坏式链路', () => {
   const source = readFileSync('src/scene/foundation-prefab-authoring.ts', 'utf8');
-  assert.match(source, /export async function rebuildP8StarterShip/);
-  assert.match(source, /export async function preflightP8StarterShip/);
-  assert.match(source, /const P8_REBUILD_CLEAN_TARGETS/);
-  assert.match(source, /const preflight = await preflightP8StarterShip\(assetDb, scene\)/);
-  assert.match(source, /await openAuthoringSceneContext\(scene, 'BOOT'\)/);
-  assert.match(source, /const boot = await rebuildP8BootScene\(scene\)/);
-  assert.match(source, /recordFoundationPhase\(journal, 'boot-scene'/);
-  assert.match(source, /initializeSceneSkeleton\(scene, 'BOOT'\)/);
-  assert.match(source, /BootScene 已全新重建/);
-  assert.match(source, /assetDb\.queryUuid\(LEGACY_CREW_PREFAB_URL\)/);
-  assert.match(source, /await waitForNodeRemoval\(scene, child\.uuid\)/);
-  assert.match(source, /await scene\.endRecording\(undoId\);\s+undoId = null;\s+await saveAuthoringScene\(\)/);
-  assert.match(source, /阶段记录：/);
-  assert.match(source, /失败恢复完成/);
-  assert.match(source, /await openAuthoringSceneContext\(scene, 'MAIN'\)/);
-  assert.match(source, /bindRoomAppearances/);
-  assert.match(source, /bindCrewAppearances/);
-  assert.match(source, /bindHullAppearances/);
-  assert.match(source, /BattleScene 重开后持久引用校验失败/);
-  assert.match(source, /BattleScene 双方飞船与战斗界面引用已通过重开验证/);
-  assert.match(source, /executeComponentMethod\(reopenedBattleBootstrap\.uuid, 'applyEditorSceneReferences'/);
-  assert.match(source, /tree\.name === sceneName/);
-  assert.match(source, /openEditorSceneAsset\(target\.url\)/);
-  assert.match(source, /P8_STANDARD_STARTER_SHIP\.reactor/);
-  assert.match(source, /P8_STANDARD_STARTER_SHIP\.medbayBuildTestTarget/);
-  assert.match(source, /export async function cancelAuthoringPreview/);
+  assert.equal((source.match(/export async function createOrUpdateScene/g) ?? []).length, 1);
+  assert.match(source, /kind === 'BOOT'/);
+  assert.match(source, /kind === 'MAIN'/);
+  assert.match(source, /ensureBattleSceneShips/);
+  assert.match(source, /清理启动场景旧英文节点/);
+  assert.match(source, /补齐主场景飞船与标准演示内容/);
+  assert.match(source, /补齐战斗双方飞船/);
+  for (const legacy of ['rebuildP8StarterShip', 'preflightP8StarterShip', 'P8_REBUILD_CLEAN_TARGETS', 'resetP8SceneShipInstances', 'cleanP8DefinitionComponents', 'rebuildP8DomainBindings', 'LEGACY_CREW_PREFAB_URL']) {
+    assert.doesNotMatch(source, new RegExp(legacy));
+  }
 });
 
-test('P8.3 预检在缺失资源时 fail-closed，且不会进入场景清理', async () => {
-  const calls = [];
-  const previousEditor = global.Editor;
-  global.Editor = { Message: { async request(domain, message, ...args) { calls.push([domain, message, ...args]); return true; } } };
-  const scene = {
-    async queryNodeTree() { throw new Error('预检不应读取场景'); },
-  };
-  const assetDb = {
-    async queryUuid(url) { calls.push(['queryUuid', url]); return url.endsWith('MedicalRoom.prefab') ? '' : `uuid:${url}`; },
-  };
-  try {
-    const result = await preflightP8StarterShip(assetDb, scene);
-    assert.equal(result.ok, false);
-    assert.match(result.message, /MedicalRoom\.prefab/);
-    assert.equal(calls.some(([domain, message]) => domain === 'scene' && message === 'remove-node'), false);
-  } finally {
-    if (previousEditor === undefined) delete global.Editor;
-    else global.Editor = previousEditor;
-  }
+test('场景消息收到未知类型时在写入前失败', async () => {
+  const result = await createOrUpdateScene({}, {}, 'UNKNOWN');
+  assert.equal(result.ok, false);
+  assert.match(result.message, /场景类型无效/);
 });

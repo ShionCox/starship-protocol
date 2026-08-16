@@ -69,6 +69,10 @@ export class BuildPageController extends Component {
       error('建造页面 Prefab 缺少持久布局引用，运行时不会重建 UI。');
       return;
     }
+    // 页面节点是持久实例；每次重新显示都从完整分类和列表顶部开始，
+    // 但 cards 缓存保留，避免反复切页 instantiate/destroy 卡片。
+    this.selectedCategory = 'ALL';
+    this.optionScrollView.scrollToTop(0);
     this.registerEvents();
   }
   protected onDisable(): void {

@@ -51,6 +51,8 @@ export interface SceneNodeTree {
   readonly name?: string;
   readonly parent?: string;
   readonly position?: { readonly x?: number; readonly y?: number; readonly z?: number };
+  /** Creator query-node-tree 在不同 3.8 小版本中可能返回 scale 或 _lscale。 */
+  readonly scale?: { readonly x?: number; readonly y?: number; readonly z?: number };
   readonly children?: readonly SceneNodeTree[];
   readonly components?: readonly SceneComponentInfo[];
   /** Cocos INode 的原始字段；适配器会优先归一化为 components。 */
@@ -174,13 +176,18 @@ export const editorSceneQuery: SceneQueryPort = {
     const dump = isSceneReferenceValue(value)
       ? { type: value.type, value: { uuid: value.uuid } }
       : isSceneTypedValue(value) ? value : { value };
-    return await Editor.Message.request('scene', 'set-property', {
-      uuid,
-      path: propertyPath,
-      dump: dump as never,
-      // 普通写入进入 Creator Undo；显式 begin-recording 内由调用方传 record:false，避免拆成多条记录。
-      record: options.record ?? true,
-    }) as boolean;
+    try {
+      return await Editor.Message.request('scene', 'set-property', {
+        uuid,
+        path: propertyPath,
+        dump: dump as never,
+        // 普通写入进入 Creator Undo；显式 begin-recording 内由调用方传 record:false，避免拆成多条记录。
+        record: options.record ?? true,
+      }) as boolean;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`Creator 写入属性失败（${propertyPath}）：${message}`);
+    }
   },
   async queryComponent(componentUuid) {
     return await Editor.Message.request('scene', 'query-component', componentUuid) as SceneComponentProperty | null;
@@ -309,6 +316,19 @@ export function getSceneComponentTarget(component: SceneComponentInfo | null | u
   return { uuid, nodeUuid: component.nodeUuid, index: component.index as number };
 }
 
+/** 从 Creator query-component 的多层 dump 中提取资源、节点或组件引用 UUID。 */
+export function readSceneReferenceUuid(value: unknown, depth = 0): string | undefined {
+  if (depth > 4) return undefined;
+  if (typeof value === 'string') return value.trim() === '' ? undefined : value;
+  const record = asRecord(value);
+  if (record === undefined) return undefined;
+  for (const key of ['uuid', '__uuid__'] as const) {
+    const uuid = readString(record[key]);
+    if (uuid !== undefined && uuid.trim() !== '') return uuid;
+  }
+  return 'value' in record ? readSceneReferenceUuid(record.value, depth + 1) : undefined;
+}
+
 function isSceneReferenceValue(value: unknown): value is SceneReferenceValue {
   return typeof value === 'object' && value !== null
     && typeof (value as { type?: unknown }).type === 'string'
@@ -330,8 +350,10 @@ export function normalizeSceneNodeTree(raw: unknown, parentUuid?: string): Scene
   const uuid = readString(source.uuid);
   const name = readString(source.name);
   const parent = readString(source.parent) ?? parentUuid;
-  const positionValue = readValue(source.position);
+  const positionValue = readValue(source.position ?? source._lpos);
   const positionRecord = asRecord(positionValue);
+  const scaleValue = readValue(source.scale ?? source._lscale);
+  const scaleRecord = asRecord(scaleValue);
   const componentSource = Array.isArray(source.components)
     ? source.components
     : Array.isArray(source.__comps__) ? source.__comps__ : [];
@@ -347,6 +369,11 @@ export function normalizeSceneNodeTree(raw: unknown, parentUuid?: string): Scene
       x: readNumber(positionRecord.x),
       y: readNumber(positionRecord.y),
       z: readNumber(positionRecord.z),
+    },
+    scale: scaleRecord === undefined ? undefined : {
+      x: readNumber(scaleRecord.x),
+      y: readNumber(scaleRecord.y),
+      z: readNumber(scaleRecord.z),
     },
     children,
     components,

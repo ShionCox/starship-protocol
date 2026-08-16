@@ -30,11 +30,11 @@ export async function initializeSceneSkeleton(scene: SceneQueryPort, kind: Scene
     await ensureComponent(scene, camera, 'cc.Camera', classes);
     const refreshedCamera = await waitForNodeComponent(scene, camera.uuid as string, 'cc.Camera', classes);
     if (refreshedCamera === undefined) throw new Error('主相机组件创建后不可编辑');
-    if (!(await scene.setProperty(refreshedCamera, 'orthoHeight', 360))) throw new Error('无法设置主相机正交高度');
-    if (!(await scene.setProperty(refreshedCamera, 'far', 2000))) throw new Error('无法设置主相机远裁剪面');
-    if (!(await scene.setProperty(refreshedCamera, 'clearFlags', 7))) throw new Error('无法设置主相机清屏模式');
+    await setPropertyIfUnset(scene, refreshedCamera, 'orthoHeight', 360);
+    await setPropertyIfUnset(scene, refreshedCamera, 'far', 2000);
+    await setPropertyIfUnset(scene, refreshedCamera, 'clearFlags', 7);
     // 正式相机同时渲染 DEFAULT 世界层和 UI_2D 层。
-    if (!(await scene.setProperty(refreshedCamera, 'visibility', 1_107_296_256))) throw new Error('无法设置主相机可见层');
+    await setPropertyIfUnset(scene, refreshedCamera, 'visibility', 1_107_296_256);
     await ensureComponents(scene, canvas, ['cc.Canvas', 'cc.UITransform', 'cc.Widget'], classes);
     const refreshedCanvas = await waitForNodeComponent(scene, canvas.uuid as string, 'cc.Canvas', classes);
     if (refreshedCanvas === undefined) throw new Error('画布组件创建后不可编辑');
@@ -74,17 +74,7 @@ export async function initializeSceneSkeleton(scene: SceneQueryPort, kind: Scene
       await wireCameraController(scene, refreshed, world.uuid, canvas.uuid as string, classes);
       const appNode = flattenTree(refreshed).find((node) => node.name === sceneNodeName('appRoot'));
       const bootstrap = appNode === undefined ? null : findComponent(appNode, 'MainSceneBootstrap', classes);
-      const bootstrapUuid = bootstrap?.value ?? bootstrap?.uuid;
-      if (bootstrapUuid === undefined) throw new Error('主场景装配组件创建后不可调用');
-      const cameraResult = await scene.executeComponentMethod(bootstrapUuid, 'applyEditorCameraDefaults', []) as { readonly ok?: boolean; readonly message?: string };
-      if (cameraResult?.ok !== true) throw new Error(cameraResult?.message ?? '无法校正主场景相机');
     } else if (kind === 'BATTLE') {
-      const appNode = flattenTree(refreshed).find((node) => node.name === sceneNodeName('appRoot'));
-      const bootstrap = appNode === undefined ? null : findComponent(appNode, 'BattleSceneBootstrap', classes);
-      const bootstrapUuid = bootstrap?.value ?? bootstrap?.uuid;
-      if (bootstrapUuid === undefined) throw new Error('战斗场景装配组件创建后不可调用');
-      const cameraResult = await scene.executeComponentMethod(bootstrapUuid, 'applyEditorCameraDefaults', []) as { readonly ok?: boolean; readonly message?: string };
-      if (cameraResult?.ok !== true) throw new Error(cameraResult?.message ?? '无法校正战斗场景相机');
     }
     await scene.snapshot();
     selectNode(tree.uuid);
@@ -95,6 +85,19 @@ export async function initializeSceneSkeleton(scene: SceneQueryPort, kind: Scene
     await scene.snapshotAbort().catch(() => undefined);
     return { ok: false, message: `${toMessage(cause)}；已回滚本次创建的场景节点` };
   }
+}
+
+/** 默认相机参数只用于新建相机；已有 Inspector 值属于设计人员布局，更新时必须保留。 */
+async function setPropertyIfUnset(scene: SceneQueryPort, target: ReturnType<typeof getSceneComponentTarget>, path: string, value: unknown): Promise<void> {
+  if (target === undefined) throw new Error(`无法设置相机属性：${path}`);
+  if (typeof scene.queryComponent !== 'function') {
+    if (!(await scene.setProperty(target, path, value))) throw new Error(`无法设置主相机${path}`);
+    return;
+  }
+  const component = await scene.queryComponent(target.uuid);
+  const current = component?.value?.[path];
+  if (current !== undefined && current !== null) return;
+  if (!(await scene.setProperty(target, path, value))) throw new Error(`无法设置主相机${path}`);
 }
 
 interface MutableNode extends SceneNodeTree { children: MutableNode[] }

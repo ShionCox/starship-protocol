@@ -169,7 +169,7 @@ test('复制 Prefab 后等待 Asset DB 导入完成再允许后续 UUID 查询',
   };
   try {
     const result = await editorAssetDb.copyAsset(
-      'db://assets/ui/prefabs/MainMenuPage.prefab',
+      'db://assets/prefabs/BlankNodeTemplate.prefab',
       'db://assets/ui/prefabs/BuildOptionCard.prefab',
     );
     assert.equal(result?.uuid, 'build-option-card-uuid');

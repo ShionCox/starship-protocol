@@ -27,7 +27,7 @@ import { ShipContentViewSync } from '../presentation/ShipContentViewSync';
 import { ConstructionGhostView } from '../presentation/ConstructionGhostView';
 import { DemolitionConfirmDialog } from '../presentation/DemolitionConfirmDialog';
 import { OfflineSettlementDialog } from '../presentation/OfflineSettlementDialog';
-import { MainPageRouter, type MainPageId } from '../presentation/MainPageRouter';
+import { MainPageRouter } from '../presentation/MainPageRouter';
 import {
   WorldInteractionController,
   type WorldContextActionId,
@@ -54,7 +54,7 @@ interface SceneShipBindings {
 
 /**
  * MainScene 的应用装配入口。它只连接 Creator 已持久保存的 ShipView、UIRoot 和公共 UI 模块；
- * 主页面由 MainPageRouter 按持久 Prefab 资源动态挂载，缺失引用时立即停止。
+ * 主页面由 MainPageRouter 管理 MainScreen 中的五个持久节点，缺失引用时立即停止。
  */
 @ccclass('MainSceneBootstrap')
 @menu('星舰协议/启动/主场景装配')
@@ -68,8 +68,11 @@ export class MainSceneBootstrap extends Component {
   @property({ type: CrewStatusPanel, displayName: '船员状态面板', tooltip: 'UIRoot Prefab 中持久保存的船员状态面板。', group: '场景引用' })
   public crewStatusPanel: CrewStatusPanel | null = null;
 
-  @property({ type: MainPageRouter, displayName: '主界面页面路由', tooltip: 'MainScreen Prefab 中负责动态页面挂载的路由。', group: '场景引用' })
+  @property({ type: MainPageRouter, displayName: '主界面页面路由', tooltip: 'MainScreen Prefab 中负责五个持久页面切换的路由。', group: '场景引用' })
   public mainPageRouter: MainPageRouter | null = null;
+
+  @property({ type: BuildPageController, displayName: '建造页面控制', tooltip: 'MainScreen 中持久建造页面的控制组件；切页只切换节点 active。', group: '场景引用' })
+  public buildPageController: BuildPageController | null = null;
 
   @property({ type: CameraController, displayName: '镜头控制', tooltip: '绑定当前 MainScene 世界根与画布的镜头控制组件。', group: '场景引用' })
   public cameraController: CameraController | null = null;
@@ -98,8 +101,6 @@ export class MainSceneBootstrap extends Component {
   private tickHandler: (() => void) | null = null;
   private constructionTickHandler: (() => void) | null = null;
   private offlineConstruction: OfflineConstructionSummary | undefined;
-  private buildPageController: BuildPageController | null = null;
-
   /**
    * 由项目创作工具通过 Creator 公开 execute-component-method 调用。
    * 正式 2D 相机使用正交投影，并同时渲染 DEFAULT 与 UI_2D 层。
@@ -136,6 +137,7 @@ export class MainSceneBootstrap extends Component {
       !isUsableComponent(this.powerPanel) ? '能源面板' : '',
       !isUsableComponent(this.crewStatusPanel) ? '船员状态面板' : '',
       !isUsableComponent(this.mainPageRouter) ? '主界面页面路由' : '',
+      !isUsableComponent(this.buildPageController) ? '建造页面控制' : '',
       !isUsableComponent(this.cameraController) ? '镜头控制' : '',
       !isUsableComponent(this.contentViewSync) ? '动态内容同步' : '',
       !isUsableComponent(this.worldInteractionController) ? '世界交互控制' : '',
@@ -167,8 +169,6 @@ export class MainSceneBootstrap extends Component {
   }
 
   protected onDisable(): void {
-    this.mainPageRouter?.bindPageMount(null);
-    this.buildPageController = null;
     this.stopTick();
   }
 
@@ -179,6 +179,7 @@ export class MainSceneBootstrap extends Component {
       !isUsableComponent(this.powerPanel) ? '能源面板' : '',
       !isUsableComponent(this.crewStatusPanel) ? '船员状态面板' : '',
       !isUsableComponent(this.mainPageRouter) ? '主界面页面路由' : '',
+      !isUsableComponent(this.buildPageController) ? '建造页面控制' : '',
       !isUsableComponent(this.cameraController) ? '镜头控制' : '',
       !isUsableComponent(this.contentViewSync) ? '动态内容同步' : '',
       !isUsableComponent(this.worldInteractionController) ? '世界交互控制' : '',
@@ -211,8 +212,6 @@ export class MainSceneBootstrap extends Component {
     const bootstrapResult = await this.port.bootstrap();
     this.state = bootstrapResult.state;
     this.offlineConstruction = bootstrapResult.offlineConstruction;
-    const mainPageRouter = this.mainPageRouter as MainPageRouter;
-    mainPageRouter.bindPageMount((pageId, pageRoot) => this.handlePageMount(pageId, pageRoot));
     crewStatusPanel.bind(bindings.blueprint.shipId, (command) => this.handleCrewTaskCommand(command));
     this.shipView = shipView;
     this.powerPanel = powerPanel;
@@ -342,17 +341,6 @@ export class MainSceneBootstrap extends Component {
         (roomId, event) => this.worldInteractionController?.openObjectContext('ROOM', roomId, event),
       );
     }
-  }
-
-  private handlePageMount(pageId: MainPageId, pageRoot: Node | null): void {
-    if (pageId === 'BUILD' && pageRoot !== null) {
-      const controller = pageRoot.getComponent(BuildPageController);
-      if (controller === null) throw new Error('建造页面 Prefab 缺少 BuildPageController');
-      this.buildPageController = controller;
-      if (this.bindings !== null && this.state !== null) this.bindBuildPage(this.getActiveShipSnapshot());
-      return;
-    }
-    if (pageId === 'BUILD' && pageRoot === null) this.buildPageController = null;
   }
 
   private bindWorldInteraction(
